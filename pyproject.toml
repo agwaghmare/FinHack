@@ -1,0 +1,7 @@
+[tool.pyright]
+include = ["backend", "app.py"]
+exclude = ["**/node_modules", "**/__pycache__"]
+pythonVersion = "3.12"
+# Match the repo’s virtualenv folder so imports (e.g. google.genai) resolve in the IDE.
+venvPath = "."
+venv = "venv"

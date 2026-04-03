@@ -1,0 +1,397 @@
+"""Market news: GNews.io + yfinance headlines; lexical sentiment; always returns articles."""
+
+from __future__ import annotations
+
+import logging
+import re
+from datetime import datetime, timezone
+
+import requests
+
+from backend.utils.env_keys import gnews_key
+
+logger = logging.getLogger(__name__)
+
+GNEWS_SEARCH = "https://gnews.io/api/v4/search"
+
+NEWS_PIPELINE_ID = "gnews+yfinance+static_fallback"
+
+_POS = (
+    "surge",
+    "rally",
+    "gain",
+    "jump",
+    "soar",
+    "beat",
+    "bull",
+    "record",
+    "growth",
+    "profit",
+    "upgrade",
+    "strong",
+    "optim",
+    "rebound",
+    "outperform",
+)
+_NEG = (
+    "plunge",
+    "crash",
+    "slump",
+    "miss",
+    "loss",
+    "bear",
+    "downgrade",
+    "lawsuit",
+    "fraud",
+    "recession",
+    "layoff",
+    "fear",
+    "warning",
+    "probe",
+    "investigation",
+    "bankrupt",
+    "selloff",
+)
+
+
+def _yf():
+    import yfinance as yf
+
+    return yf
+
+
+def _yahoo_ticker(symbol: str) -> str:
+    return symbol.upper().strip().replace(".", "-")
+
+
+def _safe_float(value: object) -> float | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _normalize_tickers_param(symbol: str) -> str:
+    raw = (symbol or "").strip()
+    if not raw:
+        return "SPY"
+    parts = re.split(r"[,;]\s*", raw)
+    out = [p.strip().upper() for p in parts if p.strip()]
+    return ",".join(out) if out else "SPY"
+
+
+def _gnews_query(tickers_csv: str) -> str:
+    parts = [p.strip() for p in tickers_csv.split(",") if p.strip()][:8]
+    if not parts:
+        return "stock market OR federal reserve OR earnings"
+    return "(" + " OR ".join(parts) + ") stock market"
+
+
+def _article_from_gnews(raw: dict) -> dict:
+    src = raw.get("source") or {}
+    name = src.get("name") if isinstance(src, dict) else str(src or "GNews")
+    return {
+        "title": (raw.get("title") or "Untitled").strip(),
+        "url": (raw.get("url") or "#").strip(),
+        "summary": (raw.get("description") or raw.get("content") or "").strip(),
+        "source": name or "GNews",
+        "time_published": raw.get("publishedAt") or "",
+        "banner_image": raw.get("image"),
+        "category_within_source": None,
+    }
+
+
+def _fetch_gnews(tickers_csv: str, max_n: int) -> list[dict]:
+    key = gnews_key()
+    if not key:
+        return []
+    q = _gnews_query(tickers_csv)
+    try:
+        r = requests.get(
+            GNEWS_SEARCH,
+            params={
+                "q": q,
+                "apikey": key,
+                "lang": "en",
+                "country": "us",
+                "max": min(max(max_n, 1), 100),
+            },
+            timeout=25,
+        )
+        if not r.ok:
+            logger.warning("GNews HTTP %s: %s", r.status_code, r.text[:200])
+            return []
+        data = r.json()
+        if not isinstance(data, dict):
+            return []
+        arts = data.get("articles") or []
+        out: list[dict] = []
+        for x in arts:
+            if isinstance(x, dict) and (x.get("title") or "").strip():
+                out.append(_article_from_gnews(x))
+        return out
+    except Exception as e:
+        logger.warning("GNews request failed: %s", e)
+        return []
+
+
+def _fetch_yfinance_news(ticker: str, need: int) -> list[dict]:
+    if need <= 0:
+        return []
+    try:
+        t = _yf().Ticker(_yahoo_ticker(ticker))
+        news = getattr(t, "news", None) or []
+    except Exception as e:
+        logger.warning("yfinance news %s: %s", ticker, e)
+        return []
+
+    out: list[dict] = []
+    for item in news:
+        if not isinstance(item, dict):
+            continue
+        title = (item.get("title") or "").strip()
+        link = (item.get("link") or "").strip()
+        if not title:
+            continue
+        pub = ""
+        raw_pub = item.get("providerPublishTime")
+        if raw_pub is not None:
+            try:
+                pub = datetime.fromtimestamp(int(raw_pub), tz=timezone.utc).isoformat()
+            except Exception:
+                pub = str(raw_pub)
+        out.append(
+            {
+                "title": title,
+                "url": link or "#",
+                "summary": (item.get("summary") or "").strip(),
+                "source": (item.get("publisher") or "Yahoo Finance"),
+                "time_published": pub,
+                "banner_image": None,
+                "category_within_source": None,
+            }
+        )
+        if len(out) >= need:
+            break
+    return out
+
+
+def _static_articles(missing: int) -> list[dict]:
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    pool = [
+        {
+            "title": "Markets digest macro data and central-bank guidance",
+            "url": "https://www.reuters.com/markets/",
+            "summary": "Placeholder item while live feeds catch up — your portfolio tools still work.",
+            "source": "FinSight (offline fallback)",
+        },
+        {
+            "title": "Earnings and guidance remain key drivers of sector rotation",
+            "url": "https://www.bloomberg.com/markets",
+            "summary": "Fallback headline — add GNEWS_API_KEY for broader real-time coverage.",
+            "source": "FinSight (offline fallback)",
+        },
+        {
+            "title": "Volatility reflects rates, labor prints, and positioning into month-end",
+            "url": "https://www.wsj.com/markets",
+            "summary": "Synthetic line — APIs or upstream news may be rate-limited or unreachable.",
+            "source": "FinSight (offline fallback)",
+        },
+        {
+            "title": "Investors balance growth outlook with credit and liquidity conditions",
+            "url": "https://www.ft.com/markets",
+            "summary": "Ensures Insights and podcasts always have narrative context.",
+            "source": "FinSight (offline fallback)",
+        },
+    ]
+    out: list[dict] = []
+    i = 0
+    while len(out) < missing and (i < 50):
+        row = pool[i % len(pool)]
+        out.append(
+            {
+                **row,
+                "time_published": ts,
+                "banner_image": None,
+                "category_within_source": None,
+            }
+        )
+        i += 1
+    return out
+
+
+def _dedupe(articles: list[dict]) -> list[dict]:
+    seen: set[str] = set()
+    out: list[dict] = []
+    for a in articles:
+        url = ((a.get("url") or "").split("?")[0]).lower().strip()
+        title = (a.get("title") or "").lower().strip()[:120]
+        key = url if url and url != "#" else title
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(a)
+    return out
+
+
+def _lexical_sentiment(article: dict) -> None:
+    t = f"{article.get('title') or ''} {article.get('summary') or ''}".lower()
+    p = sum(1 for w in _POS if w in t)
+    n = sum(1 for w in _NEG if w in t)
+    if p == 0 and n == 0:
+        article["overall_sentiment_score"] = 0.0
+        article["overall_sentiment_label"] = "Neutral"
+        return
+    score = (p - n) / max(p + n, 1)
+    score = max(-1.0, min(1.0, score))
+    article["overall_sentiment_score"] = round(score, 4)
+    if score >= 0.25:
+        article["overall_sentiment_label"] = "Bullish"
+    elif score <= -0.25:
+        article["overall_sentiment_label"] = "Bearish"
+    else:
+        article["overall_sentiment_label"] = "Neutral"
+
+
+def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
+    tickers = _normalize_tickers_param(symbol)
+    lim = int(min(max(limit, 5), 100))
+    prefer = tickers.split(",")[0].strip().upper() or "SPY"
+
+    providers: list[str] = []
+    articles: list[dict] = []
+
+    gn = _fetch_gnews(tickers, lim)
+    if gn:
+        articles.extend(gn)
+        providers.append("gnews")
+
+    if len(articles) < lim:
+        need = lim - len(articles)
+        yfn = _fetch_yfinance_news(prefer, need)
+        if yfn:
+            articles.extend(yfn)
+            providers.append("yfinance")
+
+    articles = _dedupe(articles)
+
+    floor = min(lim, 10)
+    if len(articles) < floor:
+        articles.extend(_static_articles(floor - len(articles)))
+        providers.append("fallback")
+
+    articles = articles[:lim]
+    for a in articles:
+        _lexical_sentiment(a)
+
+    scores: list[float] = []
+    for a in articles:
+        s = _safe_float(a.get("overall_sentiment_score"))
+        if s is not None:
+            scores.append(float(s))
+    avg = sum(scores) / len(scores) if scores else 0.0
+
+    return {
+        "symbol": tickers,
+        "avg_sentiment": round(avg, 4),
+        "articles": articles,
+        "article_count": len(articles),
+        "news_providers": list(dict.fromkeys(providers)) or ["fallback"],
+        "pipeline": NEWS_PIPELINE_ID,
+    }
+
+
+def get_multi_ticker_news(limit: int = 40) -> dict:
+    tickers = "SPY,QQQ,XLK,XLF,NVDA,AAPL,MSFT,TSLA,GOOGL,META"
+    return get_news_sentiment(tickers, limit=limit)
+
+
+def categorize_article_bucket(article: dict) -> str | None:
+    """Assign one narrative bucket: geo, macro, intl, sector, stock."""
+    t = f"{article.get('title') or ''} {article.get('summary') or ''}".lower()
+    geo_kw = (
+        "war",
+        "conflict",
+        "sanctions",
+        "geopolitical",
+        "nato",
+        "ukraine",
+        "russia",
+        "iran",
+        "middle east",
+        "taiwan",
+        "election",
+        "gaza",
+        "israel",
+        "defense",
+    )
+    if any(k in t for k in geo_kw):
+        return "geo"
+    macro_kw = (
+        "fed ",
+        "fomc",
+        "cpi",
+        "inflation",
+        "gdp",
+        "jobs report",
+        "payrolls",
+        "treasury",
+        "recession",
+        "rates",
+        "yield curve",
+        "consumer price",
+    )
+    if any(k in t for k in macro_kw):
+        return "macro"
+    intl_kw = (
+        "europe",
+        "china",
+        "japan",
+        "emerging",
+        "currency",
+        "yen",
+        "euro",
+        "ecb",
+        "boj",
+        "international",
+        "foreign",
+        "trade deal",
+    )
+    if any(k in t for k in intl_kw):
+        return "intl"
+    sector_kw = (
+        "semiconductor",
+        "chip",
+        "bank",
+        "energy sector",
+        "healthcare sector",
+        "tech sector",
+        "sector",
+        "xlk",
+        "xlf",
+        "xle",
+    )
+    if any(k in t for k in sector_kw):
+        return "sector"
+    stock_kw = (
+        "earnings",
+        "guidance",
+        "eps",
+        "revenue",
+        "nvidia",
+        "apple",
+        "microsoft",
+        "tesla",
+        "amazon",
+        "meta",
+        "alphabet",
+    )
+    if any(k in t for k in stock_kw):
+        return "stock"
+    return None
