@@ -2,6 +2,7 @@ from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from backend.services.portfolio_service import analyze_portfolio
 
 from backend.services.holdings_service import (
     add_or_merge_position,
@@ -13,10 +14,13 @@ from backend.services.portfolio_service import analyze_portfolio
 
 router = APIRouter()
 
+@router.get("/analyze/{user_id}")
+def analyze(user_id: str):
+    return analyze_portfolio(user_id)
 
-@router.post("/analyze")
-def analyze(portfolio: dict):
-    return analyze_portfolio(portfolio)
+# @router.post("/analyze")
+# def analyze(portfolio: dict):
+#     return analyze_portfolio(portfolio)
 
 
 class HoldingIn(BaseModel):

@@ -86,12 +86,49 @@ def _normalize_tickers_param(symbol: str) -> str:
     return ",".join(out) if out else "SPY"
 
 
+# def _gnews_query(tickers_csv: str) -> str:
+#     parts = [p.strip() for p in tickers_csv.split(",") if p.strip()][:8]
+#     if not parts:
+#         return "stock market OR federal reserve OR earnings"
+#     return "(" + " OR ".join(parts) + ") stock market"
+
+COMPANY_NAMES = {
+    "AAPL": "Apple",
+    "MSFT": "Microsoft",
+    "GOOGL": "Google Alphabet",
+    "GOOG": "Google Alphabet",
+    "AMZN": "Amazon",
+    "TSLA": "Tesla",
+    "NVDA": "NVIDIA",
+    "META": "Meta Facebook",
+    "NFLX": "Netflix",
+    "AMD": "AMD semiconductor",
+    "INTC": "Intel",
+    "CRM": "Salesforce",
+    "ORCL": "Oracle",
+    "UBER": "Uber",
+    "LYFT": "Lyft",
+    "SHOP": "Shopify",
+    "SQ": "Block Square payments",
+    "PYPL": "PayPal",
+    "JPM": "JPMorgan Chase",
+    "BAC": "Bank of America",
+    "GS": "Goldman Sachs",
+    "MS": "Morgan Stanley",
+    "SPY": "S&P 500 market",
+    "QQQ": "Nasdaq tech market",
+}
+
 def _gnews_query(tickers_csv: str) -> str:
     parts = [p.strip() for p in tickers_csv.split(",") if p.strip()][:8]
-    if not parts:
-        return "stock market OR federal reserve OR earnings"
-    return "(" + " OR ".join(parts) + ") stock market"
-
+    terms = []
+    for t in parts:
+        company = COMPANY_NAMES.get(t.upper(), "")
+        if company:
+            terms.append(f'"{company}"')
+        else:
+            terms.append(t)
+    return "(" + " OR ".join(terms) + ") stock"
 
 def _article_from_gnews(raw: dict) -> dict:
     src = raw.get("source") or {}
@@ -145,8 +182,8 @@ def _fetch_yfinance_news(ticker: str, need: int) -> list[dict]:
     if need <= 0:
         return []
     try:
-        t = _yf().Ticker(_yahoo_ticker(ticker))
-        news = getattr(t, "news", None) or []
+        results = _yf().Search(ticker, news_count=need)
+        news = results.news or []
     except Exception as e:
         logger.warning("yfinance news %s: %s", ticker, e)
         return []
@@ -155,32 +192,32 @@ def _fetch_yfinance_news(ticker: str, need: int) -> list[dict]:
     for item in news:
         if not isinstance(item, dict):
             continue
-        title = (item.get("title") or "").strip()
-        link = (item.get("link") or "").strip()
+        content = item.get("content", item)
+        title = (content.get("title") or "").strip()
         if not title:
             continue
-        pub = ""
-        raw_pub = item.get("providerPublishTime")
-        if raw_pub is not None:
-            try:
-                pub = datetime.fromtimestamp(int(raw_pub), tz=timezone.utc).isoformat()
-            except Exception:
-                pub = str(raw_pub)
-        out.append(
-            {
-                "title": title,
-                "url": link or "#",
-                "summary": (item.get("summary") or "").strip(),
-                "source": (item.get("publisher") or "Yahoo Finance"),
-                "time_published": pub,
-                "banner_image": None,
-                "category_within_source": None,
-            }
+        url = (
+            (content.get("canonicalUrl") or {}).get("url")
+            or (content.get("clickThroughUrl") or {}).get("url")
+            or "#"
         )
+        provider = content.get("provider") or {}
+        source = provider.get("displayName") or "Yahoo Finance"
+        pub = content.get("pubDate") or content.get("displayTime") or ""
+        summary = (content.get("summary") or content.get("description") or "").strip()
+
+        out.append({
+            "title": title,
+            "url": url,
+            "summary": summary,
+            "source": source,
+            "time_published": pub,
+            "banner_image": None,
+            "category_within_source": None,
+        })
         if len(out) >= need:
             break
     return out
-
 
 def _static_articles(missing: int) -> list[dict]:
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -267,17 +304,19 @@ def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
     providers: list[str] = []
     articles: list[dict] = []
 
-    gn = _fetch_gnews(tickers, lim)
-    if gn:
-        articles.extend(gn)
-        providers.append("gnews")
+    # Try yfinance FIRST — free, no rate limits
+    yfn = _fetch_yfinance_news(prefer, lim)
+    if yfn:
+        articles.extend(yfn)
+        providers.append("yfinance")
 
+    # Use GNews to fill remaining slots if we have quota
     if len(articles) < lim:
         need = lim - len(articles)
-        yfn = _fetch_yfinance_news(prefer, need)
-        if yfn:
-            articles.extend(yfn)
-            providers.append("yfinance")
+        gn = _fetch_gnews(tickers, need)
+        if gn:
+            articles.extend(gn)
+            providers.append("gnews")
 
     articles = _dedupe(articles)
 
@@ -305,6 +344,53 @@ def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
         "news_providers": list(dict.fromkeys(providers)) or ["fallback"],
         "pipeline": NEWS_PIPELINE_ID,
     }
+
+# def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
+#     tickers = _normalize_tickers_param(symbol)
+#     lim = int(min(max(limit, 5), 100))
+#     prefer = tickers.split(",")[0].strip().upper() or "SPY"
+
+#     providers: list[str] = []
+#     articles: list[dict] = []
+
+#     gn = _fetch_gnews(tickers, lim)
+#     if gn:
+#         articles.extend(gn)
+#         providers.append("gnews")
+
+#     if len(articles) < lim:
+#         need = lim - len(articles)
+#         yfn = _fetch_yfinance_news(prefer, need)
+#         if yfn:
+#             articles.extend(yfn)
+#             providers.append("yfinance")
+
+#     articles = _dedupe(articles)
+
+#     floor = min(lim, 10)
+#     if len(articles) < floor:
+#         articles.extend(_static_articles(floor - len(articles)))
+#         providers.append("fallback")
+
+#     articles = articles[:lim]
+#     for a in articles:
+#         _lexical_sentiment(a)
+
+#     scores: list[float] = []
+#     for a in articles:
+#         s = _safe_float(a.get("overall_sentiment_score"))
+#         if s is not None:
+#             scores.append(float(s))
+#     avg = sum(scores) / len(scores) if scores else 0.0
+
+#     return {
+#         "symbol": tickers,
+#         "avg_sentiment": round(avg, 4),
+#         "articles": articles,
+#         "article_count": len(articles),
+#         "news_providers": list(dict.fromkeys(providers)) or ["fallback"],
+#         "pipeline": NEWS_PIPELINE_ID,
+#     }
 
 
 def get_multi_ticker_news(limit: int = 40) -> dict:

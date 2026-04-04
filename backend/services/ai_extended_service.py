@@ -290,13 +290,28 @@ def _run_mistral_holdings(prompt: str) -> str:
 def portfolio_analysis(user_id: str) -> dict[str, Any]:
     p = get_portfolio(user_id)
     h = snapshot(user_id)
+    
+    # Import and run our ML risk score
+    from backend.services.portfolio_service import analyze_portfolio
+    risk_data = analyze_portfolio(user_id)
+
     prompt = f"""You are a portfolio analyst focused on financial education and research support (not personalized investment advice).
 Summarize risks, diversification, and 3 practical learning bullets for a retail investor. Avoid buy/sell commands.
 Paper / sandbox portfolio JSON: {p}
-Real holdings snapshot JSON: {json.dumps(h, default=str)[:7000]}
+Real holdings snapshot JSON: {json.dumps(h, default=str)[:5000]}
+ML Risk Analysis: {json.dumps(risk_data, default=str)}
+The portfolio has an overall risk score of {risk_data['risk_score']}/100 ({risk_data['risk_label']} risk).
+Reference specific position risk scores and beta/volatility in your analysis.
 If holdings exist, include concentration risk and a simple VaR-style intuition (e.g., what a -2% to -3% day could imply in dollars).
 Keep under 200 words."""
-    return {"user_id": user_id, "analysis": _run(prompt)}
+
+    return {
+        "user_id": user_id,
+        "analysis": _run(prompt),
+        "risk_score": risk_data["risk_score"],
+        "risk_label": risk_data["risk_label"],
+        "positions": risk_data["positions"],
+    }
 
 
 def news_summary(user_id: str | None = None) -> dict[str, Any]:
