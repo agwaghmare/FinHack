@@ -307,6 +307,7 @@ export function Settings() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Badge ok={!!s.gnews} label="GNews" />
           <Badge ok={!!s.openai} label="OpenAI" />
+          <Badge ok={!!s.mistral} label="Mistral" />
           <Badge ok={!!s.fred} label="FRED" />
           <Badge ok={!!s.gemini} label="Gemini" />
           <Badge ok={!!s.elevenlabs} label="ElevenLabs" />

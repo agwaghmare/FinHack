@@ -23,6 +23,10 @@ def openai_key() -> str:
     return _get("OPENAI_API_KEY", "OPENAI")
 
 
+def mistral_key() -> str:
+    return _get("MISTRAL_API_KEY", "MISTRAL")
+
+
 def gemini_key() -> str:
     return _get(
         "GEMINI_API_KEY",

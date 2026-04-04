@@ -162,7 +162,7 @@ export const api = {
     j(
       `/learn/certificate/${encodeURIComponent(userId)}/${encodeURIComponent(moduleId)}`,
     ),
-  /** Module-scoped LLM tutor — same AI pipeline as Insights (Gemini, then OpenAI fallback). */
+  /** Learn tutor — Mistral AI chat. */
   learnTutor: (moduleId: string, question: string) =>
     j("/learn/tutor", {
       method: "POST",
@@ -180,6 +180,7 @@ export const api = {
       news_pipeline?: string;
       market_cross_asset?: boolean;
       ai_explain?: boolean;
+      mistral_key_loaded?: boolean;
     }>("/health"),
   triggerAlert: (payload: Record<string, unknown>) =>
     j("/alerts/trigger", {

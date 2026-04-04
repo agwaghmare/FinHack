@@ -11,8 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 # Always load keys from the repo root (folder containing this file), not only from CWD.
 # utf-8-sig strips a UTF-8 BOM so the first key is not "\ufeffGEMINI_API_KEY".
 _ROOT = Path(__file__).resolve().parent
-load_dotenv(_ROOT / ".env", encoding="utf-8-sig")
-load_dotenv(encoding="utf-8-sig")  # optional overrides if the shell cwd has another .env
+# override=True: repo-root .env wins over empty/partial exports (e.g. MISTRAL_API_KEY= in the shell).
+load_dotenv(_ROOT / ".env", encoding="utf-8-sig", override=True)
+load_dotenv(encoding="utf-8-sig")  # optional extra keys from cwd .env (does not unset root keys)
 
 _logger = logging.getLogger("uvicorn.error")
 
@@ -67,13 +68,17 @@ def _route_paths() -> set[str]:
 
 @app.on_event("startup")
 def _startup_checks() -> None:
-    from backend.utils.env_keys import gemini_key, openai_key
+    from backend.utils.env_keys import gemini_key, mistral_key, openai_key
 
     if not gemini_key() and not openai_key():
         _logger.warning(
             "AI keys not loaded: set GEMINI_API_KEY or GOOGLE_API_KEY (or OPENAI_API_KEY) in "
             "the repo root .env next to app.py, save the file, then restart uvicorn. "
             "frontend/.env is not read by the Python API."
+        )
+    if not mistral_key():
+        _logger.warning(
+            "MISTRAL_API_KEY not loaded — Learn tutor and AI holdings coach require it (repo root .env)."
         )
     # Starts a background job to generate the market-close podcast.
     try:
@@ -102,7 +107,7 @@ def root():
 
 @app.get("/health")
 def health():
-    from backend.utils.env_keys import gemini_key, openai_key
+    from backend.utils.env_keys import gemini_key, mistral_key, openai_key
 
     paths = _route_paths()
     return {
@@ -115,4 +120,5 @@ def health():
         "ai_explain": "/ai/explain" in paths,
         "gemini_key_loaded": bool(gemini_key()),
         "openai_key_loaded": bool(openai_key()),
+        "mistral_key_loaded": bool(mistral_key()),
     }

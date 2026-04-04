@@ -11,13 +11,21 @@ from typing import Any
 from backend.services.holdings_service import snapshot
 from backend.services.news_service import get_news_sentiment
 from backend.services.sandbox_store import get_portfolio
-from backend.utils.env_keys import gemini_key, openai_key
+from backend.utils.env_keys import gemini_key, mistral_key, openai_key
 
 logger = logging.getLogger(__name__)
 
 DEMO_REPLY = (
     "Demo mode: set GEMINI_API_KEY or OPENAI_API_KEY for live summaries. "
     "This is placeholder insight text for the hackathon UI."
+)
+# Shorter hint for coach/tutor — avoid stacking DEMO_REPLY on top of a long specific error.
+_ENV_KEY_HINT = (
+    "Set GEMINI_API_KEY and/or OPENAI_API_KEY in the API .env (repo root, next to app.py) and restart uvicorn."
+)
+_MISTRAL_KEY_HINT = (
+    "Set MISTRAL_API_KEY in the API .env (repo root, next to app.py) and restart uvicorn. "
+    "Optional: MISTRAL_MODEL=mistral-small-latest (or another Mistral chat model)."
 )
 _GEMINI_COOLDOWN_UNTIL_TS = 0.0
 _GEMINI_COOLDOWN_SECS = int(os.getenv("GEMINI_QUOTA_COOLDOWN_SECONDS", "120"))
@@ -78,6 +86,102 @@ def _ai_failure_message(*, last_gemini_err: Exception | None, openai_key_configu
     return "\n\n".join(lines)
 
 
+def _gemini_generate_once_models(prompt: str) -> tuple[str | None, Exception | None, bool]:
+    """
+    Try Gemini models in order. Updates quota cooldown on 429-like errors.
+    Returns (text, last_error, any_quota_error_seen).
+    """
+    global _GEMINI_COOLDOWN_UNTIL_TS
+    c = _client()
+    last_err: Exception | None = None
+    any_quota = False
+    for model in _gemini_model_list():
+        try:
+            r = c.models.generate_content(model=model, contents=prompt)
+            text = (r.text or "").strip()
+            if text:
+                return text, None, False
+        except Exception as e:
+            last_err = e
+            logger.warning("Gemini model %s failed: %s", model, e)
+            if _looks_like_gemini_quota_error(e):
+                any_quota = True
+                _GEMINI_COOLDOWN_UNTIL_TS = time.time() + max(30, _GEMINI_COOLDOWN_SECS)
+            continue
+    return None, last_err, any_quota
+
+
+def _mistral_error_detail(r: Any) -> str:
+    """Best-effort parse of Mistral error JSON (avoid logging secrets)."""
+    try:
+        j = r.json()
+        if isinstance(j, dict):
+            d = j.get("detail") or j.get("message") or j.get("error")
+            if isinstance(d, dict):
+                d = d.get("message") or str(d)
+            if d:
+                return str(d)[:400]
+    except Exception:
+        pass
+    try:
+        return (r.text or "")[:400]
+    except Exception:
+        return "unknown error"
+
+
+def _mistral_chat(prompt: str, *, system: str | None = None) -> tuple[str | None, str | None]:
+    """
+    Mistral Chat API for Learn tutor and holdings coach.
+
+    Returns (assistant_text, error_message). On success error_message is None.
+    If ``error_message`` is ``__NO_KEY__``, MISTRAL_API_KEY is missing.
+    """
+    key = mistral_key()
+    if not key:
+        return None, "__NO_KEY__"
+    model = (os.getenv("MISTRAL_MODEL") or "mistral-small-latest").strip() or "mistral-small-latest"
+    messages: list[dict[str, str]] = []
+    sys_s = (system or "").strip()
+    if sys_s:
+        messages.append({"role": "system", "content": sys_s})
+    messages.append({"role": "user", "content": (prompt or "").strip()})
+    if not messages[-1]["content"]:
+        return None, "empty user message"
+    try:
+        import httpx
+
+        r = httpx.post(
+            "https://api.mistral.ai/v1/chat/completions",
+            headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
+            json={
+                "model": model,
+                "messages": messages,
+                "max_tokens": 2048,
+                "temperature": 0.3,
+            },
+            timeout=90.0,
+        )
+        if r.status_code >= 400:
+            detail = _mistral_error_detail(r)
+            logger.warning("Mistral chat HTTP %s: %s", r.status_code, detail)
+            return None, f"HTTP {r.status_code} — {detail}"
+        data = r.json()
+        ch = data.get("choices") or []
+        if ch and isinstance(ch[0], dict):
+            c0 = ch[0].get("message") or {}
+            t = (c0.get("content") or "").strip()
+            if t:
+                return t, None
+        return None, "empty or unexpected response from Mistral"
+    except httpx.HTTPStatusError as e:
+        detail = _mistral_error_detail(e.response)
+        logger.warning("Mistral chat HTTPStatusError: %s", detail)
+        return None, f"HTTP {e.response.status_code} — {detail}"
+    except Exception as e:
+        logger.warning("Mistral chat completion failed: %s", e)
+        return None, f"{type(e).__name__}: {e!s}"[:400]
+
+
 def _openai_complete(prompt: str) -> str | None:
     key = openai_key()
     if not key:
@@ -128,26 +232,15 @@ def _run(prompt: str) -> str:
     use_gemini = bool(gkey) and now >= _GEMINI_COOLDOWN_UNTIL_TS
     if use_gemini:
         try:
-            c = _client()
-            last_err: Exception | None = None
-            for model in _gemini_model_list():
-                try:
-                    r = c.models.generate_content(model=model, contents=prompt)
-                    text = (r.text or "").strip()
-                    if text:
-                        return text
-                except Exception as e:
-                    last_err = e
-                    logger.warning("Gemini model %s failed: %s", model, e)
-                    if _looks_like_gemini_quota_error(e):
-                        _GEMINI_COOLDOWN_UNTIL_TS = time.time() + max(30, _GEMINI_COOLDOWN_SECS)
-                    continue
+            text, last_err, any_quota = _gemini_generate_once_models(prompt)
+            if text:
+                return text
             fb = _openai_complete(prompt)
             if fb:
                 return fb
             if last_err:
                 logger.exception("Gemini generate failed after model fallbacks")
-                if _looks_like_gemini_quota_error(last_err):
+                if any_quota or (last_err and _looks_like_gemini_quota_error(last_err)):
                     return (
                         "Gemini is temporarily rate-limited (quota). "
                         "OpenAI fallback is not configured, so showing a demo-style response instead. "
@@ -177,6 +270,21 @@ def _run(prompt: str) -> str:
 
     o = _openai_complete(prompt)
     return o if o else DEMO_REPLY
+
+
+def _run_mistral_holdings(prompt: str) -> str:
+    """Holdings coach: Mistral AI only."""
+    text, err = _mistral_chat(prompt)
+    if text:
+        return text
+    if err == "__NO_KEY__":
+        return f"Holdings coach uses Mistral AI. {_MISTRAL_KEY_HINT}"
+    return (
+        f"Holdings coach could not reach Mistral ({err}). "
+        "401 Unauthorized usually means the key is wrong, revoked, or for a different workspace — create a new key in "
+        "the Mistral console and paste it as MISTRAL_API_KEY in the repo root .env, then restart uvicorn. "
+        f"If the model name is wrong, set MISTRAL_MODEL (e.g. mistral-small-latest). {_MISTRAL_KEY_HINT}"
+    )
 
 
 def portfolio_analysis(user_id: str) -> dict[str, Any]:
@@ -246,8 +354,18 @@ Topics: {topics_s}
 Learner question: {user_question}
 
 If the question is unrelated to finance or this module, acknowledge briefly and steer back in one or two sentences."""
-    full_prompt = f"{system}\n\n{user_block}"
-    return {"reply": _run(full_prompt)}
+    text, err = _mistral_chat(user_block, system=system)
+    if text:
+        return {"reply": text}
+    if err == "__NO_KEY__":
+        return {"reply": f"Learn tutor uses Mistral AI. {_MISTRAL_KEY_HINT}"}
+    return {
+        "reply": (
+            f"Learn tutor Mistral error ({err}). "
+            "401 = invalid or expired API key — generate a new key in the Mistral dashboard and update MISTRAL_API_KEY. "
+            f"{_MISTRAL_KEY_HINT}"
+        )
+    }
 
 
 def real_holdings_coach(user_id: str) -> dict[str, Any]:
@@ -261,4 +379,4 @@ Real holdings snapshot (JSON): {blob}
 
 If positions is empty: three short bullets on goals, risk tolerance, and building a first research habit.
 If positions exist: (1) plain-language concentration/diversification read, (2) two research questions to explore next, (3) one risk or cost reminder. No buy/sell orders. Under 230 words."""
-    return {"user_id": user_id, "coaching": _run(prompt)}
+    return {"user_id": user_id, "coaching": _run_mistral_holdings(prompt)}
