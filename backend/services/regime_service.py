@@ -66,7 +66,7 @@ def _rules_classifier(
         bear_score += 1
 
     # Fed rate — high rates = tighter = bearish
-    if fed_rate > 4.5:
+    if fed_rate > 4.25:
         bear_score += 1
     elif fed_rate < 2.0:
         bull_score += 1

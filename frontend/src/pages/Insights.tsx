@@ -1,5 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mic, Newspaper, Sparkles, TrendingUp } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Activity,
+  LineChart,
+  Loader2,
+  Mic,
+  Newspaper,
+  PieChart,
+  Sparkles,
+  Target,
+  TrendingUp,
+} from "lucide-react";
 import { api, postAiAudioSummary } from "../lib/api";
 import { ClerkUserGate } from "../components/ClerkUserGate";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
@@ -43,6 +53,19 @@ type AvArticle = {
   overall_sentiment_label?: string;
   overall_sentiment_score?: number;
 };
+
+/** Safe external URL for news links — avoids href="#" opening a blank tab / SPA quirks. */
+function externalArticleUrl(raw: string | undefined): string | null {
+  const u = (raw ?? "").trim();
+  if (!u || u === "#") return null;
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
 
 type PortfolioPosition = {
   symbol: string;
@@ -282,6 +305,246 @@ function FormattedInsight({ text, kind }: { text: string; kind?: string }) {
   );
 }
 
+function regimeBarGradient(label: string): string {
+  if (label === "Bull") {
+    return "bg-gradient-to-b from-emerald-400 to-emerald-600 dark:from-emerald-400/90 dark:to-emerald-700";
+  }
+  if (label === "Bear") {
+    return "bg-gradient-to-b from-rose-400 to-rose-600 dark:from-rose-400/90 dark:to-rose-700";
+  }
+  return "bg-gradient-to-b from-amber-300 to-amber-500 dark:from-amber-400/80 dark:to-amber-600";
+}
+
+function MacroStrategyContext({ strategy }: { strategy: StrategyData }) {
+  const days = strategy.regime_last_30d ?? {};
+  const dayEntries = Object.entries(days).filter(([, v]) => typeof v === "number" && v > 0) as [
+    string,
+    number,
+  ][];
+  const totalDays = dayEntries.reduce((acc, [, n]) => acc + n, 0) || 1;
+
+  const chip = (label: string, value: string, tone: "slate" | "amber" | "sky" | "rose") => {
+    const tones = {
+      slate: "border-zinc-200/80 bg-white/90 text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-100",
+      amber: "border-amber-500/25 bg-amber-500/5 text-amber-950 dark:border-amber-500/20 dark:bg-amber-950/20 dark:text-amber-100",
+      sky: "border-sky-500/25 bg-sky-500/5 text-sky-950 dark:border-sky-500/20 dark:bg-sky-950/25 dark:text-sky-100",
+      rose: "border-rose-500/20 bg-rose-500/5 text-rose-950 dark:border-rose-500/15 dark:bg-rose-950/20 dark:text-rose-100",
+    };
+    return (
+      <div
+        className={`rounded-xl border px-3 py-3 shadow-sm transition-shadow hover:shadow-md ${tones[tone]}`}
+      >
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+          {label}
+        </p>
+        <p className="mt-1 break-words text-base font-bold tabular-nums tracking-tight">{value}</p>
+      </div>
+    );
+  };
+
+  return (
+    <div className="mb-4 space-y-6 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.07] via-zinc-50/60 to-transparent p-5 dark:from-indigo-950/35 dark:via-zinc-950/45 dark:to-transparent">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-indigo-600/10 text-indigo-600 ring-1 ring-indigo-500/30 dark:from-indigo-400/15 dark:to-indigo-600/5 dark:text-indigo-300 dark:ring-indigo-400/25">
+            <Activity className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 pt-0.5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
+              Macro &amp; regime
+            </p>
+            <h3 className="mt-1 text-xl font-bold leading-tight tracking-tight text-zinc-900 dark:text-white sm:text-2xl">
+              Market backdrop
+            </h3>
+            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Context the model uses for strategy framing — not a forecast.
+            </p>
+          </div>
+        </div>
+        <span
+          className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold shadow-sm ${
+            strategy.regime === "Bull"
+              ? "border-emerald-500/40 bg-emerald-500/[0.12] text-emerald-800 dark:text-emerald-200"
+              : strategy.regime === "Bear"
+                ? "border-rose-500/40 bg-rose-500/[0.12] text-rose-800 dark:text-rose-200"
+                : "border-amber-500/40 bg-amber-500/[0.12] text-amber-900 dark:text-amber-100"
+          }`}
+        >
+          <LineChart className="h-4 w-4 opacity-90" />
+          <span>{strategy.regime}</span>
+          <span className="font-semibold opacity-75">· {strategy.confidence_pct ?? "—"}%</span>
+        </span>
+      </div>
+
+      {strategy.narrative ? (
+        <p className="rounded-xl border border-zinc-200/80 bg-white/50 px-4 py-3 text-sm leading-relaxed text-zinc-700 dark:border-zinc-700/80 dark:bg-zinc-900/40 dark:text-zinc-300">
+          {strategy.narrative}
+        </p>
+      ) : null}
+
+      {dayEntries.length > 0 ? (
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Last ~30 sessions
+            </p>
+            <h4 className="mt-1 text-lg font-bold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
+              Regime mix
+            </h4>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              How many recent days were tagged Bull, Bear, or mixed — hover a band for the exact split.
+            </p>
+          </div>
+
+          <div
+            className="rounded-2xl border border-zinc-200/90 bg-zinc-100/90 p-2 shadow-inner dark:border-zinc-700/90 dark:bg-zinc-950/80"
+            role="img"
+            aria-label={`Regime mix over about ${totalDays} sessions: ${dayEntries.map(([l, d]) => `${l} ${d} days`).join(", ")}`}
+          >
+            <div className="flex h-8 w-full gap-1 sm:h-9">
+              {dayEntries.map(([label, d]) => {
+                const pct = Math.round((d / totalDays) * 100);
+                const showLabel = pct >= 14;
+                return (
+                  <div
+                    key={label}
+                    style={{ flex: `${d} 1 0` }}
+                    className="group relative min-w-[10px] overflow-hidden rounded-lg ring-1 ring-black/[0.06] dark:ring-white/10"
+                  >
+                    <div
+                      className={`flex h-full min-h-[2rem] items-center justify-center transition-[filter,transform] duration-200 group-hover:brightness-110 sm:min-h-[2.25rem] ${regimeBarGradient(label)}`}
+                      title={`${label}: ${d} sessions (${pct}%)`}
+                    >
+                      {showLabel ? (
+                        <span className="pointer-events-none px-1 text-center text-[10px] font-bold uppercase tracking-wider text-white drop-shadow-sm sm:text-xs">
+                          {pct}%
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {dayEntries.map(([label, d]) => {
+              const pct = Math.round((d / totalDays) * 100);
+              const barClass =
+                label === "Bull"
+                  ? "from-emerald-500 to-emerald-600"
+                  : label === "Bear"
+                    ? "from-rose-500 to-rose-600"
+                    : "from-amber-400 to-amber-500";
+              return (
+                <li
+                  key={label}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-white/70 px-3 py-2.5 dark:border-zinc-700/80 dark:bg-zinc-900/50"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      className={`h-3 w-3 shrink-0 rounded-full bg-gradient-to-br shadow-sm ${barClass}`}
+                    />
+                    <span className="truncate text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      {label}
+                    </span>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-bold tabular-nums text-zinc-900 dark:text-white">{pct}%</p>
+                    <p className="text-[11px] font-medium tabular-nums text-zinc-500 dark:text-zinc-400">
+                      {d} day{d === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {(strategy.fed_rate != null ||
+        strategy.cpi != null ||
+        strategy.unemployment != null ||
+        strategy.pce != null) && (
+        <div className="space-y-4 border-t border-zinc-200/70 pt-5 dark:border-zinc-700/70">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Macro snapshot
+            </p>
+            <h4 className="mt-1 text-lg font-bold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
+              Key indicators
+            </h4>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Latest figures shown alongside regime context.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {strategy.fed_rate != null ? chip("Fed funds", `${strategy.fed_rate}%`, "amber") : null}
+            {strategy.cpi != null ? chip("CPI", String(strategy.cpi), "sky") : null}
+            {strategy.unemployment != null
+              ? chip("UNEMP", `${strategy.unemployment}%`, "rose")
+              : null}
+            {strategy.pce != null ? chip("PCE", strategy.pce.toLocaleString(), "slate") : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InsightPanelShell({
+  icon,
+  title,
+  subtitle,
+  accent,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle?: string;
+  accent: "violet" | "blue" | "emerald";
+  children: ReactNode;
+}) {
+  const ring =
+    accent === "violet"
+      ? "border-violet-500/20 dark:border-violet-500/15"
+      : accent === "blue"
+        ? "border-blue-500/20 dark:border-blue-500/15"
+        : "border-emerald-500/20 dark:border-emerald-500/15";
+  const iconBg =
+    accent === "violet"
+      ? "bg-violet-500/12 text-violet-600 ring-violet-500/20 dark:text-violet-300"
+      : accent === "blue"
+        ? "bg-blue-500/12 text-blue-600 ring-blue-500/20 dark:text-blue-300"
+        : "bg-emerald-500/12 text-emerald-600 ring-emerald-500/20 dark:text-emerald-300";
+
+  return (
+    <div className={`glass flex flex-col rounded-2xl border ${ring} p-0 shadow-sm shadow-zinc-900/5 dark:shadow-black/20`}>
+      <div className="flex items-start gap-3 border-b border-zinc-200/70 px-5 py-4 dark:border-zinc-800/80">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${iconBg}`}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
+            <span className="rounded-full border border-zinc-200/80 bg-zinc-100/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-400">
+              AI tutor
+            </span>
+          </div>
+          {subtitle ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+              {subtitle}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex-1 px-5 pb-5 pt-4">{children}</div>
+    </div>
+  );
+}
+
 function InsightsContent({ userId }: { userId: string }) {
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [news, setNews] = useState<unknown>(null);
@@ -469,6 +732,31 @@ function InsightsContent({ userId }: { userId: string }) {
   return (
     <div className="space-y-8">
 
+      {/* ── Page Header ── */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Insights</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">
+            AI research support &amp; strategy framing
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-zinc-500">
+            Headlines from GNews and Yahoo, plus LLM panels (Gemini/OpenAI) for portfolio, news, and paper-lab strategy —
+            aligned with <strong className="font-medium text-zinc-600 dark:text-zinc-400">investment research</strong>{" "}
+            support; combine with <strong className="font-medium text-zinc-600 dark:text-zinc-400">Learn Hub</strong> for
+            education. Not personalized advice.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={playCombinedAudio}
+          disabled={audioBusy || loading}
+          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900"
+        >
+          {audioBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
+          Play AI audio
+        </button>
+      </header>
+
       {/* ── Holdings News Section ── */}
       <section className="glass rounded-2xl border border-blue-500/20 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
@@ -511,19 +799,33 @@ function InsightsContent({ userId }: { userId: string }) {
                     <p className="text-xs text-zinc-500">No headlines found for {ticker}.</p>
                   ) : (
                     <ul className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                      {articles.map((a, i) => (
+                      {articles.map((a, i) => {
+                        const href = externalArticleUrl(a.url);
+                        const title = a.title ?? "Untitled";
+                        return (
                         <li key={`${a.url ?? i}-${i}`} className="flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
-                          <a href={a.url ?? "#"} target="_blank" rel="noopener noreferrer"
-                            className="line-clamp-3 text-sm font-medium leading-snug text-zinc-100 hover:underline underline-offset-2">
-                            {a.title ?? "Untitled"}
-                          </a>
+                          {href ? (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="line-clamp-3 text-sm font-medium leading-snug text-zinc-100 hover:underline underline-offset-2"
+                            >
+                              {title}
+                            </a>
+                          ) : (
+                            <span className="line-clamp-3 text-sm font-medium leading-snug text-zinc-100">
+                              {title}
+                            </span>
+                          )}
                           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-zinc-500 mt-auto">
                             {a.source && <span className="truncate">{a.source}</span>}
                             {a.time_published && <span className="tabular-nums shrink-0">{a.time_published.slice(0, 10)}</span>}
                             <SentimentBadge label={a.overall_sentiment_label} />
                           </div>
                         </li>
-                      ))}
+                        );
+                      })}
                     </ul>
                   )}
                 </div>
@@ -589,116 +891,6 @@ function InsightsContent({ userId }: { userId: string }) {
         )}
       </section>
 
-      {/* ── Page Header ── */}
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Insights</p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">
-            AI research support &amp; strategy framing
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Headlines from GNews and Yahoo, plus LLM panels (Gemini/OpenAI) for portfolio, news, and paper-lab strategy —
-            aligned with <strong className="font-medium text-zinc-600 dark:text-zinc-400">investment research</strong>{" "}
-            support; combine with <strong className="font-medium text-zinc-600 dark:text-zinc-400">Learn Hub</strong> for
-            education. Not personalized advice.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={playCombinedAudio}
-          disabled={audioBusy || loading}
-          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900"
-        >
-          {audioBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
-          Play AI audio
-        </button>
-      </header>
-
-      {/* ── Market News Feed ── */}
-      <section className="glass rounded-2xl p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Newspaper className="h-5 w-5 text-blue-400" />
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Market news feed</h2>
-            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-200">
-              GNews + Yahoo
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="ins-news-ticker" className="text-xs text-zinc-500">Tickers</label>
-            <input
-              id="ins-news-ticker"
-              className="w-32 rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm uppercase text-white dark:bg-zinc-900/80"
-              value={newsTicker}
-              onChange={(e) => setNewsTicker(e.target.value.toUpperCase())}
-              placeholder={heldSymbols.length > 0 ? heldSymbols.slice(0, 3).join(",") : "SPY"}
-              maxLength={24}
-            />
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          Uses <code className="rounded bg-zinc-800 px-1">GNews</code> (with{" "}
-          <code className="rounded bg-zinc-800 px-1">GNEWS_API_KEY</code>) plus Yahoo headlines. Enter
-          one or more tickers (e.g. SPY or SPY,NVDA) to bias the search. Blank defaults to your holdings.
-        </p>
-        {newsLoading && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading headlines…
-          </div>
-        )}
-        {newsErr && <p className="mt-4 text-sm text-amber-600 dark:text-amber-300">{newsErr}</p>}
-        {!newsLoading && newsFeed?.error && (
-          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-700 dark:text-red-200">
-            {newsFeed.error}
-          </p>
-        )}
-        {!newsLoading && newsFeed?.api_message && (
-          <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-100">
-            {newsFeed.api_message}
-          </p>
-        )}
-        {!newsLoading && newsFeed && (
-          <div className="mt-4 space-y-3">
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="rounded-full border border-zinc-700 bg-zinc-900/40 px-3 py-1 text-zinc-200">
-                Avg sentiment:{" "}
-                {typeof newsFeed.avg_sentiment === "number" ? newsFeed.avg_sentiment.toFixed(3) : "—"}
-              </span>
-              <span className="text-zinc-500">
-                {newsFeed.article_count ?? newsFeed.articles?.length ?? 0} articles
-              </span>
-            </div>
-            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {(newsFeed.articles ?? []).slice(0, 6).map((a, i) => (
-                <li key={`${a.url ?? i}-${i}`} className="flex h-full min-h-[8rem] flex-row gap-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-3">
-                  <div className="min-w-0 flex-1">
-                    <a href={a.url ?? "#"} target="_blank" rel="noopener noreferrer"
-                      className="line-clamp-3 text-sm font-medium leading-snug text-zinc-800 underline-offset-2 hover:underline dark:text-zinc-100">
-                      {a.title ?? "Untitled"}
-                    </a>
-                    <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-zinc-500">
-                      {a.source && <span className="truncate">{a.source}</span>}
-                      {a.time_published && <span className="shrink-0 tabular-nums">{a.time_published.slice(0, 10)}</span>}
-                      {a.overall_sentiment_score != null && (
-                        <span className="tabular-nums">s {Number(a.overall_sentiment_score).toFixed(2)}</span>
-                      )}
-                    </div>
-                    {a.summary && (
-                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">{a.summary}</p>
-                    )}
-                  </div>
-                  {a.overall_sentiment_label && (
-                    <div className="flex w-20 shrink-0 flex-col items-end justify-start border-l border-zinc-800/80 pl-2 sm:w-24 sm:pl-3">
-                      <SentimentBadge label={a.overall_sentiment_label} />
-                    </div>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </section>
-
       {loading && (
         <div className="flex items-center gap-2 text-sm text-zinc-500">
           <Loader2 className="h-4 w-4 animate-spin" /> Loading insight panels…
@@ -723,12 +915,37 @@ function InsightsContent({ userId }: { userId: string }) {
       )}
       {audioUrl && <audio controls src={audioUrl} className="w-full max-w-md" />}
 
-      {/* ── Insight Panels ── */}
+      {/* ── Insight Panels (AI tutor) ── */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {sections.map(({ key, title, text, placeholder }) => (
-          <div key={key} className="glass rounded-2xl p-6">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
+        {sections.map(({ key, title, text, placeholder }) => {
+          const shell =
+            key === "portfolio"
+              ? {
+                  accent: "violet" as const,
+                  icon: <PieChart className="h-5 w-5" />,
+                  subtitle:
+                    "Risk, Sharpe, and position context from your linked holdings — for learning, not advice.",
+                }
+              : key === "news"
+                ? {
+                    accent: "blue" as const,
+                    icon: <Newspaper className="h-5 w-5" />,
+                    subtitle: "How headlines are leaning and what that often implies for themes and sentiment.",
+                  }
+                : {
+                    accent: "emerald" as const,
+                    icon: <Target className="h-5 w-5" />,
+                    subtitle: "Paper-lab framing with macro regime context — not personalized trade instructions.",
+                  };
 
+          return (
+            <InsightPanelShell
+              key={key}
+              icon={shell.icon}
+              title={title}
+              subtitle={shell.subtitle}
+              accent={shell.accent}
+            >
             {/* Portfolio risk score UI */}
             {key === "portfolio" && portfolio?.risk_score != null && (
               <div className="mt-4 space-y-3">
@@ -787,62 +1004,9 @@ function InsightsContent({ userId }: { userId: string }) {
               <p className="mt-4 text-sm text-zinc-500">Add positions to see your risk score.</p>
             )}
 
-            {/* Strategy regime context */}
-            {key === "strategy" && strategy?.regime && (
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wide">Market Regime</span>
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                    strategy.regime === "Bull"
-                      ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/30"
-                      : strategy.regime === "Bear"
-                        ? "bg-rose-400/10 text-rose-400 border border-rose-400/30"
-                        : "bg-yellow-400/10 text-yellow-400 border border-yellow-400/30"
-                  }`}>
-                    {strategy.regime} · {strategy.confidence_pct}% confidence
-                  </span>
-                </div>
-                {strategy.narrative && (
-                  <p className="text-xs text-zinc-400 leading-relaxed">{strategy.narrative}</p>
-                )}
-                {strategy.regime_last_30d && Object.keys(strategy.regime_last_30d).length > 0 && (
-                  <div className="flex gap-3 text-[10px]">
-                    {Object.entries(strategy.regime_last_30d).map(([label, days]) => (
-                      <div key={label} className="flex items-center gap-1">
-                        <span className={`font-semibold ${
-                          label === "Bull" ? "text-emerald-400" :
-                          label === "Bear" ? "text-rose-400" : "text-yellow-400"
-                        }`}>{label}</span>
-                        <span className="text-zinc-500">{days}d</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2 text-[10px]">
-                  {strategy.fed_rate != null && (
-                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
-                      Fed {strategy.fed_rate}%
-                    </span>
-                  )}
-                  {strategy.cpi != null && (
-                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
-                      CPI {strategy.cpi}
-                    </span>
-                  )}
-                  {strategy.unemployment != null && (
-                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
-                      Unemployment {strategy.unemployment}%
-                    </span>
-                  )}
-                  {strategy.pce != null && (
-                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
-                      PCE {strategy.pce.toLocaleString()}
-                    </span>
-                  )}
-                </div>
-                <div className="h-px bg-zinc-800" />
-              </div>
-            )}
+            {key === "strategy" && strategy?.regime ? (
+              <MacroStrategyContext strategy={strategy} />
+            ) : null}
 
             {key !== "portfolio" && placeholder && (
               <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-200">
@@ -852,9 +1016,124 @@ function InsightsContent({ userId }: { userId: string }) {
             )}
 
             {text ? <FormattedInsight text={text} kind={key} /> : null}
-          </div>
-        ))}
+            </InsightPanelShell>
+          );
+        })}
       </div>
+
+      {/* ── Market news feed (bottom) ── */}
+      <section
+        id="market-news-feed"
+        className="glass rounded-2xl border border-blue-500/15 p-6 shadow-sm dark:border-blue-500/10"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 ring-1 ring-blue-500/20 dark:text-blue-300">
+              <Newspaper className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Market news feed</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">GNews + Yahoo — search by ticker or your holdings</p>
+            </div>
+            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-200">
+              Live
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="ins-news-ticker" className="text-xs text-zinc-500">Tickers</label>
+            <input
+              id="ins-news-ticker"
+              className="w-36 rounded-xl border border-zinc-300 bg-white/90 px-3 py-2 text-sm uppercase text-zinc-900 shadow-sm placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-white"
+              value={newsTicker}
+              onChange={(e) => setNewsTicker(e.target.value.toUpperCase())}
+              placeholder={heldSymbols.length > 0 ? heldSymbols.slice(0, 3).join(",") : "SPY"}
+              maxLength={24}
+            />
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+          Uses <code className="rounded bg-zinc-200/80 px-1.5 py-0.5 text-[11px] dark:bg-zinc-800">GNews</code> (with{" "}
+          <code className="rounded bg-zinc-200/80 px-1.5 py-0.5 text-[11px] dark:bg-zinc-800">GNEWS_API_KEY</code>) plus Yahoo.
+          Enter tickers (e.g. <span className="font-mono text-zinc-600 dark:text-zinc-300">SPY,NVDA</span>) or leave blank for holdings.
+        </p>
+        {newsLoading && (
+          <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading headlines…
+          </div>
+        )}
+        {newsErr && <p className="mt-4 text-sm text-amber-600 dark:text-amber-300">{newsErr}</p>}
+        {!newsLoading && newsFeed?.error && (
+          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-700 dark:text-red-200">
+            {newsFeed.error}
+          </p>
+        )}
+        {!newsLoading && newsFeed?.api_message && (
+          <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-100">
+            {newsFeed.api_message}
+          </p>
+        )}
+        {!newsLoading && newsFeed && (
+          <div className="mt-5 space-y-4">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200">
+                Avg sentiment:{" "}
+                {typeof newsFeed.avg_sentiment === "number" ? newsFeed.avg_sentiment.toFixed(3) : "—"}
+              </span>
+              <span className="text-zinc-500">
+                {newsFeed.article_count ?? newsFeed.articles?.length ?? 0} articles
+              </span>
+            </div>
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {(newsFeed.articles ?? []).slice(0, 6).map((a, i) => {
+                const href = externalArticleUrl(a.url);
+                const title = a.title ?? "Untitled";
+                return (
+                <li
+                  key={`${a.url ?? i}-${i}`}
+                  className="flex h-full min-h-[8rem] flex-row gap-3 rounded-xl border border-zinc-200/90 bg-white/60 p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/40"
+                >
+                  <div className="min-w-0 flex-1">
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="line-clamp-3 text-sm font-medium leading-snug text-zinc-900 underline-offset-2 hover:underline dark:text-zinc-100"
+                      >
+                        {title}
+                      </a>
+                    ) : (
+                      <span className="line-clamp-3 text-sm font-medium leading-snug text-zinc-900 dark:text-zinc-100">
+                        {title}
+                      </span>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-zinc-500">
+                      {a.source && <span className="truncate">{a.source}</span>}
+                      {a.time_published && (
+                        <span className="shrink-0 tabular-nums">{a.time_published.slice(0, 10)}</span>
+                      )}
+                      {a.overall_sentiment_score != null && (
+                        <span className="tabular-nums">s {Number(a.overall_sentiment_score).toFixed(2)}</span>
+                      )}
+                    </div>
+                    {a.summary && (
+                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                        {a.summary}
+                      </p>
+                    )}
+                  </div>
+                  {a.overall_sentiment_label && (
+                    <div className="flex w-20 shrink-0 flex-col items-end justify-start border-l border-zinc-200/80 pl-2 dark:border-zinc-800/80 sm:w-24 sm:pl-3">
+                      <SentimentBadge label={a.overall_sentiment_label} />
+                    </div>
+                  )}
+                </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

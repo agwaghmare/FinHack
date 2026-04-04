@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -80,6 +81,8 @@ def get_clerk_user_json(user_id: str) -> dict[str, Any] | None:
     """Fetch a user from Clerk by user id (uses CLERK_SECRET_KEY)."""
     if not user_id:
         return None
+    if not clerk_secret_key():
+        return None
     try:
         r = clerk_backend_request("GET", f"/users/{user_id}")
         if r.status_code != 200:
@@ -89,3 +92,44 @@ def get_clerk_user_json(user_id: str) -> dict[str, Any] | None:
     except Exception as e:
         logger.exception("Clerk API error: %s", e)
         return None
+
+
+def _display_name_from_clerk_user(data: dict[str, Any]) -> str | None:
+    fn = (data.get("first_name") or "").strip()
+    ln = (data.get("last_name") or "").strip()
+    full = f"{fn} {ln}".strip()
+    if full:
+        return full
+    un = (data.get("username") or "").strip()
+    if un:
+        return un
+    emails = data.get("email_addresses") or []
+    if isinstance(emails, list):
+        for e in emails:
+            if isinstance(e, dict):
+                em = (e.get("email_address") or "").strip()
+                if em and "@" in em:
+                    return em.split("@")[0]
+    return None
+
+
+def _anonymous_peer_label(user_id: str) -> str:
+    n = int(hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:8], 16) % 9000 + 1000
+    return f"Peer {n}"
+
+
+def leaderboard_display_label(user_id: str) -> str:
+    """
+    Name for Paper Lab leaderboard rows.
+    Uses Clerk (first/last, username, or email local-part) when CLERK_SECRET_KEY is set.
+    """
+    if not user_id:
+        return "Member"
+    if user_id == "demo":
+        return "Demo"
+    data = get_clerk_user_json(user_id)
+    if data:
+        label = _display_name_from_clerk_user(data)
+        if label:
+            return label
+    return _anonymous_peer_label(user_id)

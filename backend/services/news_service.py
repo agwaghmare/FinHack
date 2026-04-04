@@ -178,6 +178,72 @@ def _fetch_gnews(tickers_csv: str, max_n: int) -> list[dict]:
         return []
 
 
+def _yf_url_from_content(content: dict) -> str:
+    """Resolve article URL from yfinance nested news payload (canonical / click-through)."""
+    for key in ("clickThroughUrl", "canonicalUrl"):
+        block = content.get(key)
+        if isinstance(block, dict):
+            u = (block.get("url") or "").strip()
+            if u and u.startswith("http"):
+                return u
+    preview = content.get("previewUrl")
+    if isinstance(preview, str) and preview.startswith("http"):
+        return preview.strip()
+    return ""
+
+
+def _article_from_yfinance_row(item: dict, *, ticker: str) -> dict | None:
+    """
+    yfinance >= 0.2.40 returns news rows as {id, content: {title, canonicalUrl, ...}}.
+    Older builds used a flat {title, link, publisher, providerPublishTime, summary}.
+    """
+    sym = _yahoo_ticker(ticker)
+    quote_news = f"https://finance.yahoo.com/quote/{sym}/news/"
+
+    content = item.get("content")
+    if isinstance(content, dict):
+        title = (content.get("title") or "").strip()
+        if not title:
+            return None
+        link = _yf_url_from_content(content)
+        if not link:
+            link = quote_news
+        summary = (content.get("summary") or content.get("description") or "").strip()
+        pub = (content.get("pubDate") or content.get("displayTime") or "").strip()
+        provider = content.get("provider") if isinstance(content.get("provider"), dict) else {}
+        publisher = (provider.get("displayName") or "Yahoo Finance").strip() or "Yahoo Finance"
+        return {
+            "title": title,
+            "url": link,
+            "summary": summary,
+            "source": publisher,
+            "time_published": pub,
+            "banner_image": None,
+            "category_within_source": None,
+        }
+
+    title = (item.get("title") or "").strip()
+    if not title:
+        return None
+    link = (item.get("link") or "").strip() or quote_news
+    pub = ""
+    raw_pub = item.get("providerPublishTime")
+    if raw_pub is not None:
+        try:
+            pub = datetime.fromtimestamp(int(raw_pub), tz=timezone.utc).isoformat()
+        except Exception:
+            pub = str(raw_pub)
+    return {
+        "title": title,
+        "url": link,
+        "summary": (item.get("summary") or "").strip(),
+        "source": (item.get("publisher") or "Yahoo Finance"),
+        "time_published": pub,
+        "banner_image": None,
+        "category_within_source": None,
+    }
+
+
 def _fetch_yfinance_news(tickers: list[str], need: int) -> list[dict]:
     if need <= 0:
         return []
@@ -194,32 +260,15 @@ def _fetch_yfinance_news(tickers: list[str], need: int) -> list[dict]:
         for item in news:
             if not isinstance(item, dict):
                 continue
-            title = (item.get("title") or "").strip()
-            link = (item.get("link") or "").strip()
-            if not title:
+            row = _article_from_yfinance_row(item, ticker=ticker)
+            if not row:
                 continue
+            title = row["title"]
             tkey = title.lower()[:140]
             if tkey in seen_titles:
                 continue
             seen_titles.add(tkey)
-            pub = ""
-            raw_pub = item.get("providerPublishTime")
-            if raw_pub is not None:
-                try:
-                    pub = datetime.fromtimestamp(int(raw_pub), tz=timezone.utc).isoformat()
-                except Exception:
-                    pub = str(raw_pub)
-            out.append(
-                {
-                    "title": title,
-                    "url": link or "#",
-                    "summary": (item.get("summary") or "").strip(),
-                    "source": (item.get("publisher") or "Yahoo Finance"),
-                    "time_published": pub,
-                    "banner_image": None,
-                    "category_within_source": None,
-                }
-            )
+            out.append(row)
             if len(out) >= need:
                 break
         if len(out) >= need:
@@ -231,25 +280,25 @@ def _static_articles(missing: int) -> list[dict]:
     pool = [
         {
             "title": "Markets digest macro data and central-bank guidance",
-            "url": "https://www.reuters.com/markets/",
+            "url": "https://finance.yahoo.com/news/",
             "summary": "Placeholder item while live feeds catch up — your portfolio tools still work.",
             "source": "FinSight (offline fallback)",
         },
         {
             "title": "Earnings and guidance remain key drivers of sector rotation",
-            "url": "https://www.bloomberg.com/markets",
+            "url": "https://finance.yahoo.com/markets/",
             "summary": "Fallback headline — add GNEWS_API_KEY for broader real-time coverage.",
             "source": "FinSight (offline fallback)",
         },
         {
             "title": "Volatility reflects rates, labor prints, and positioning into month-end",
-            "url": "https://www.wsj.com/markets",
+            "url": "https://finance.yahoo.com/markets/stocks/",
             "summary": "Synthetic line — APIs or upstream news may be rate-limited or unreachable.",
             "source": "FinSight (offline fallback)",
         },
         {
             "title": "Investors balance growth outlook with credit and liquidity conditions",
-            "url": "https://www.ft.com/markets",
+            "url": "https://finance.yahoo.com/topic/economic-news/",
             "summary": "Ensures Insights and podcasts always have narrative context.",
             "source": "FinSight (offline fallback)",
         },

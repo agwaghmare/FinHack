@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from backend.services.holdings_service import snapshot
+from backend.services.market_service import get_stock_fundamentals
 from backend.services.news_service import get_news_sentiment
 from backend.services.sandbox_store import get_portfolio
 from backend.utils.env_keys import gemini_key, mistral_key, openai_key
@@ -495,13 +496,105 @@ Keep total response under 220 words. No disclaimers."""
         "holdings_analyzed": held[:6],
     }
 
+def _paper_lab_fundamentals_blob(symbols: list[str], *, max_symbols: int = 5) -> str:
+    """Compact yfinance slices for Mistral context (best-effort)."""
+    chunks: list[str] = []
+    for sym in symbols[:max_symbols]:
+        sym = sym.upper().strip()
+        if not sym:
+            continue
+        try:
+            f = get_stock_fundamentals(sym)
+            if f.get("error"):
+                chunks.append(json.dumps({"symbol": sym, "note": "fundamentals_unavailable", "error": f.get("error")}))
+                continue
+            chunks.append(
+                json.dumps(
+                    {
+                        "symbol": f.get("symbol"),
+                        "name": f.get("long_name"),
+                        "sector": f.get("sector"),
+                        "industry": f.get("industry"),
+                        "summary": f.get("summary"),
+                        "trailing_pe": f.get("trailing_pe"),
+                        "forward_pe": f.get("forward_pe"),
+                        "trailing_eps": f.get("trailing_eps"),
+                        "profit_margins": f.get("profit_margins"),
+                        "market_cap": f.get("market_cap"),
+                    },
+                    default=str,
+                )
+            )
+        except Exception as e:
+            logger.debug("paper lab fundamentals %s: %s", sym, e)
+            chunks.append(json.dumps({"symbol": sym, "note": "fetch_failed"}))
+    return "\n".join(chunks) if chunks else "(no symbols to look up)"
+
+
 def trade_feedback(user_id: str) -> dict[str, Any]:
+    """Paper Lab coaching via Mistral + public fundamentals (simulation only; not real-money advice)."""
     p = get_portfolio(user_id)
-    prompt = f"""Review simulated trading activity: comment on frequency, concentration, and discipline.
-{p}
-Under 120 words."""
-    # Paper/sandbox AI feedback should remain Gemini-driven.
-    return {"user_id": user_id, "feedback": _run(prompt)}
+    positions = p.get("positions") or []
+    trades = p.get("trades") or []
+    syms = list(
+        dict.fromkeys(
+            str(x.get("symbol") or "").upper().strip()
+            for x in positions
+            if x.get("symbol")
+        )
+    )
+    fund_blob = _paper_lab_fundamentals_blob(syms)
+
+    system = """You are **Mistral Paper Lab** — analyst for a **simulated** trading sandbox only.
+
+Voice: sound like a research desk briefing: clear, direct, a bit upbeat when metrics support it. You may say a company **appears** in reasonable financial shape or **looks** stretched **based only on the numbers provided** — e.g. margins, P/E context, scale — and suggest **paper-portfolio** follow-ups (deeper read, compare a peer, set a rule in the sim).
+
+Hard rules:
+- Do **not** tell the user to buy, sell, or hold real securities; no price targets or guarantees.
+- Do **not** invent filings or numbers: only use the portfolio JSON and fundamentals lines; if data is missing, say so.
+- End with one short line that this is educational simulation output, not personalized investment advice."""
+
+    user_block = f"""## Sandbox portfolio (JSON)
+{json.dumps(p, default=str)[:4500]}
+
+## Recent trade count
+{len(trades)} round-trip events in history (buy/sell rows above).
+
+## Public fundamentals snapshot (yfinance; incomplete OK)
+{fund_blob[:6500]}
+
+## Write the feedback with these sections (markdown headings OK)
+
+1. **Simulation activity** — How active they've been, which tickers, concentration vs cash (cite figures).
+
+2. **Names & financial picture** — For each held symbol, a short paragraph: is the business **profile** (from summary/sector) sensible for a learner holding? Do trailing P/E, margins, or scale **suggest** generally healthy vs speculative positioning — **only** from the data given. If thin data, say what you'd check next in real research.
+
+3. **Suggested paper-lab moves** — 2–4 bullets framed as **simulation** ideas (e.g. add a defensive sleeve in the sandbox, cap single-name size, write a one-line thesis before the next paper trade). Wording can include phrases like ""interesting candidate to track in the paper book"" — not an order to invest real capital.
+
+4. **Quick analytics** — Bullets: approximate % of equity in top holding, number of positions, trades per symbol if obvious, cash runway tone.
+
+Keep total under ~320 words unless data is very rich."""
+
+    text, err = _mistral_chat(user_block, system=system)
+    if text:
+        return {"user_id": user_id, "feedback": text, "provider": "mistral"}
+    if err == "__NO_KEY__":
+        return {
+            "user_id": user_id,
+            "feedback": (
+                "Mistral Paper Lab needs Mistral AI. "
+                f"{_MISTRAL_KEY_HINT}"
+            ),
+            "provider": "mistral",
+        }
+    return {
+        "user_id": user_id,
+        "feedback": (
+            f"Mistral Paper Lab could not reach the API ({err}). "
+            "Check MISTRAL_API_KEY and MISTRAL_MODEL, then restart the server."
+        ),
+        "provider": "mistral",
+    }
 
 
 def crash_probability_narrative(score_0_1: float) -> str:
