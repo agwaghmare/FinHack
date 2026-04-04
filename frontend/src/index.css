@@ -32,3 +32,76 @@ body {
 .glass {
   @apply bg-white/70 dark:bg-zinc-900/60 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-glass;
 }
+
+/* Market Pulse login streak banner */
+.login-streak-shimmer {
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(251, 191, 36, 0.12) 45%,
+    rgba(253, 224, 71, 0.18) 50%,
+    rgba(251, 191, 36, 0.12) 55%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: streak-shimmer 4s ease-in-out infinite;
+}
+
+@keyframes streak-shimmer {
+  0%,
+  100% {
+    background-position: 100% 0;
+  }
+  50% {
+    background-position: 0% 0;
+  }
+}
+
+.login-streak-icon {
+  animation: streak-bob 2.2s ease-in-out infinite;
+}
+
+@keyframes streak-bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) rotate(2deg) scale(1.05);
+  }
+}
+
+.login-streak-sparkle {
+  animation: streak-sparkle 1.8s ease-in-out infinite;
+}
+
+@keyframes streak-sparkle {
+  0%,
+  100% {
+    opacity: 0.35;
+    transform: scale(0.85) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.15) rotate(25deg);
+  }
+}
+
+.login-streak-num {
+  animation: streak-pop 0.65s ease-out 0.15s both;
+}
+
+@keyframes streak-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.5;
+  }
+  70% {
+    transform: scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}

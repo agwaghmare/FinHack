@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Gem, Loader2 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
 
@@ -16,17 +17,12 @@ type CrossAssetPayload = {
   }[];
 };
 
-const ETF_AG = ["GLD", "SLV", "DBA", "USO", "CORN", "WEAT"];
-
 export function CommodityLens() {
   const [macro, setMacro] = useState<{ cpi?: number; rates?: number; gdp?: number } | null>(
     null,
   );
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [oilShock, setOilShock] = useState(0);
-  const [usdShock, setUsdShock] = useState(0);
-  const [ratesShock, setRatesShock] = useState(0);
   const [chainHeadline, setChainHeadline] = useState<string | null>(null);
   const [crossAsset, setCrossAsset] = useState<CrossAssetPayload | null>(null);
 
@@ -70,29 +66,6 @@ export function CommodityLens() {
     }
   }, []);
 
-  const wti = quotes.find((q) => (q.symbol ?? "").includes("WTI") || q.kind === "commodity");
-  const baseOil = typeof wti?.price === "number" ? wti.price : 75;
-
-  const scenario = useMemo(() => {
-    const oilFactor = 1 + oilShock / 100;
-    const stressedOil = baseOil * oilFactor;
-    const usdFactor = 1 - usdShock / 400;
-    const ratesBps = ratesShock;
-    const energyBeta = 0.38;
-    const usdCommodityBeta = -0.22;
-    const ratesDrag = ratesBps * -0.00015;
-    const macroRates = macro?.rates != null && macro.rates > 4 ? -0.015 : 0;
-    const portfolioProxy =
-      100 *
-      (1 +
-        energyBeta * (oilFactor - 1) +
-        usdCommodityBeta * (usdFactor - 1) +
-        ratesDrag +
-        macroRates);
-    const agProxy = 100 * (1 + (oilFactor - 1) * 0.12 + usdCommodityBeta * (usdFactor - 1) * 0.8);
-    return { stressedOil, portfolioProxy, agProxy };
-  }, [baseOil, oilShock, usdShock, ratesShock, macro?.rates]);
-
   return (
     <div className="space-y-10">
       <header>
@@ -104,8 +77,12 @@ export function CommodityLens() {
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-500">
           CPI, Fed funds, and GDP (FRED) live here with oil, metals, ag proxies, and G10 FX — moved from
-          Market Pulse so the tape page stays focused on equities and crypto. Stress sliders mimic how
-          desks think about USD and policy alongside energy.
+          Market Pulse so the tape page stays focused on equities and crypto. For the interactive stress
+          sliders (oil, USD, rates), use the{" "}
+          <Link to="/learn#cross-asset-stress" className="text-amber-500/90 underline underline-offset-2">
+            Cross-asset stress lab
+          </Link>{" "}
+          on Learn.
         </p>
       </header>
 
@@ -230,93 +207,6 @@ export function CommodityLens() {
         {quotes.length === 0 && !loading && (
           <p className="text-sm text-zinc-500">No quotes returned — check API key and symbols.</p>
         )}
-      </section>
-
-      <section id="scenario" className="scroll-mt-24 space-y-4">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-          Multi-factor simulation
-        </h2>
-        <p className="text-sm text-zinc-500">
-          Illustrative stress: oil (%), USD strength (rank), policy rate shock (bp). Not a model of your
-          book — a teaching layer for cross-asset intuition.
-        </p>
-        <div className="glass max-w-2xl rounded-2xl p-6 space-y-6">
-          <label className="flex flex-col gap-3">
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Oil shock (%)
-            </span>
-            <input
-              type="range"
-              min={-30}
-              max={40}
-              value={oilShock}
-              onChange={(e) => setOilShock(Number(e.target.value))}
-              className="w-full accent-zinc-400"
-            />
-            <div className="flex justify-between text-xs text-zinc-500">
-              <span>-30%</span>
-              <span>+40%</span>
-            </div>
-          </label>
-          <label className="flex flex-col gap-3">
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              USD strength shock (rank units)
-            </span>
-            <input
-              type="range"
-              min={-20}
-              max={20}
-              value={usdShock}
-              onChange={(e) => setUsdShock(Number(e.target.value))}
-              className="w-full accent-amber-600"
-            />
-            <div className="flex justify-between text-xs text-zinc-500">
-              <span>Weaker USD</span>
-              <span>Stronger USD</span>
-            </div>
-          </label>
-          <label className="flex flex-col gap-3">
-            <span className="text-xs font-medium uppercase tracking-wide text-zinc-500">
-              Policy rate shock (basis points, drag)
-            </span>
-            <input
-              type="range"
-              min={-50}
-              max={100}
-              value={ratesShock}
-              onChange={(e) => setRatesShock(Number(e.target.value))}
-              className="w-full accent-emerald-700"
-            />
-            <div className="flex justify-between text-xs text-zinc-500">
-              <span>-50 bp</span>
-              <span>+100 bp</span>
-            </div>
-          </label>
-          <dl className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <dt className="text-zinc-500">Stressed WTI</dt>
-              <dd className="mt-1 font-semibold tabular-nums text-white">
-                ${scenario.stressedOil.toFixed(2)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-zinc-500">Energy-heavy book proxy (100)</dt>
-              <dd className="mt-1 font-semibold tabular-nums text-white">
-                {scenario.portfolioProxy.toFixed(1)}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-zinc-500">Ag/USD-sensitive proxy (100)</dt>
-              <dd className="mt-1 font-semibold tabular-nums text-white">
-                {scenario.agProxy.toFixed(1)}
-              </dd>
-            </div>
-          </dl>
-          <p className="text-[11px] leading-relaxed text-zinc-500">
-            Proxies: {ETF_AG.join(", ")} — corn and soybeans often trade via futures or sector ETFs;
-            ethanol linkage is one channel among many.
-          </p>
-        </div>
       </section>
     </div>
   );

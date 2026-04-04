@@ -70,7 +70,12 @@ export function ClerkAuthRoot({ children }: { children: ReactNode }) {
 
   return (
     <ClerkEnabledContext.Provider value={true}>
-      <ClerkProvider publishableKey={pk} afterSignOutUrl="/" signInFallbackRedirectUrl="/pulse" signUpFallbackRedirectUrl="/pulse">
+      <ClerkProvider
+        publishableKey={pk}
+        afterSignOutUrl="/"
+        signInFallbackRedirectUrl="/pulse"
+        signUpFallbackRedirectUrl="/onboarding"
+      >
         <TokenBridge />
         {children}
       </ClerkProvider>
@@ -117,8 +122,8 @@ export function ClerkSignUpPage() {
         routing="path"
         path="/sign-up"
         signInUrl="/sign-in"
-        fallbackRedirectUrl="/pulse"
-        forceRedirectUrl="/pulse"
+        fallbackRedirectUrl="/onboarding"
+        forceRedirectUrl="/onboarding"
       />
     </div>
   );

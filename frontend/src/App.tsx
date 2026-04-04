@@ -16,6 +16,8 @@ import { Learn } from "./pages/Learn";
 import { CommodityLens } from "./pages/CommodityLens";
 import { Welcome } from "./pages/Welcome";
 import { RealPortfolio } from "./pages/RealPortfolio";
+import { Onboarding } from "./pages/Onboarding";
+import { RequireOnboarding } from "./components/RequireOnboarding";
 
 function WelcomeOrRedirect() {
   const clerkOn = useClerkEnabled();
@@ -48,22 +50,25 @@ export default function App() {
         <Route path="/sign-in/*" element={<ClerkSignInPage />} />
         <Route path="/sign-up/*" element={<ClerkSignUpPage />} />
         <Route element={<RequireAuth />}>
-          <Route element={<Layout />}>
-            <Route path="pulse" element={<Market />} />
-            <Route path="portfolio" element={<RealPortfolio />} />
-            <Route path="paper-lab" element={<PaperTrading />} />
-            <Route path="macro-regime" element={<CommodityLens />} />
-            <Route path="commodities" element={<Navigate to="/macro-regime" replace />} />
-            <Route path="insights" element={<Insights />} />
-            <Route path="ai" element={<Navigate to="/insights" replace />} />
-            <Route path="learn" element={<Learn />} />
-            <Route path="alerts" element={<Alerts />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="market" element={<Navigate to="/pulse" replace />} />
-            <Route path="trade" element={<Navigate to="/paper-lab" replace />} />
-            <Route path="dashboard" element={<Navigate to="/pulse" replace />} />
-            <Route path="news" element={<Navigate to="/pulse" replace />} />
-            <Route path="*" element={<Navigate to="/pulse" replace />} />
+          <Route path="onboarding" element={<Onboarding />} />
+          <Route element={<RequireOnboarding />}>
+            <Route element={<Layout />}>
+              <Route path="pulse" element={<Market />} />
+              <Route path="portfolio" element={<RealPortfolio />} />
+              <Route path="paper-lab" element={<PaperTrading />} />
+              <Route path="macro-regime" element={<CommodityLens />} />
+              <Route path="commodities" element={<Navigate to="/macro-regime" replace />} />
+              <Route path="insights" element={<Insights />} />
+              <Route path="ai" element={<Navigate to="/insights" replace />} />
+              <Route path="learn" element={<Learn />} />
+              <Route path="alerts" element={<Alerts />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="market" element={<Navigate to="/pulse" replace />} />
+              <Route path="trade" element={<Navigate to="/paper-lab" replace />} />
+              <Route path="dashboard" element={<Navigate to="/pulse" replace />} />
+              <Route path="news" element={<Navigate to="/pulse" replace />} />
+              <Route path="*" element={<Navigate to="/pulse" replace />} />
+            </Route>
           </Route>
         </Route>
       </Routes>

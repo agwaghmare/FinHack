@@ -3,6 +3,7 @@ import { Loader2, RefreshCw, Sparkles, Trash2, Wallet } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { SuggestedPortfolio } from "../components/SuggestedPortfolio";
 
 type PositionRow = {
   symbol: string;
@@ -303,6 +304,8 @@ export function RealPortfolio() {
           symbols or try again in a moment.
         </p>
       )}
+
+      <SuggestedPortfolio />
 
       <section className="glass rounded-2xl border border-violet-500/20 p-5 dark:border-violet-500/15">
         <div className="flex flex-wrap items-start justify-between gap-3">
