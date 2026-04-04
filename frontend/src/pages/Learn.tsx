@@ -354,9 +354,7 @@ function LearnContent({ userId }: { userId: string }) {
             </div>
             <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
               Ask anything about the <strong className="text-zinc-800 dark:text-zinc-200">selected module</strong>. Answers
-              come from <strong className="text-zinc-800 dark:text-zinc-200">Mistral AI</strong> (set{" "}
-              <code className="text-xs text-zinc-500">MISTRAL_API_KEY</code> in the API <code className="text-xs">.env</code>
-              ).
+              come from <strong className="text-zinc-800 dark:text-zinc-200">Mistral AI</strong>.
             </p>
             {selected ? (
               <div className="mt-4 space-y-3">

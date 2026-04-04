@@ -312,12 +312,7 @@ export function RealPortfolio() {
               <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">AI holdings coach</h2>
             </div>
             <p className="mt-2 max-w-2xl text-xs text-zinc-500">
-              Uses <strong className="font-medium text-zinc-600 dark:text-zinc-400">Mistral AI</strong>. Set{" "}
-              <code className="rounded bg-zinc-200/80 px-1 dark:bg-zinc-800">MISTRAL_API_KEY</code> in the API{" "}
-              <code className="rounded bg-zinc-200/80 px-1 dark:bg-zinc-800">.env</code>. Optional:{" "}
-              <code className="rounded bg-zinc-200/80 px-1 dark:bg-zinc-800">MISTRAL_MODEL</code> (default{" "}
-              <code className="rounded bg-zinc-200/80 px-1 dark:bg-zinc-800">mistral-small-latest</code>). Not buy/sell
-              advice.
+              Uses <strong className="font-medium text-zinc-600 dark:text-zinc-400">Mistral AI</strong>. Not buy/sell advice.
             </p>
           </div>
           <button
