@@ -2,12 +2,18 @@
 
 from typing import Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
 from backend.data.learn_modules import LEARN_MODULES, QUIZZES
 from backend.services.ai_extended_service import learn_tutor_reply
+from backend.services.learn_community_service import (
+    add_reply as community_add_reply,
+    create_post as community_create_post,
+    list_posts as community_list_posts,
+    risk_preview as community_risk_preview,
+)
 from backend.services.voice_service import text_to_speech
 
 router = APIRouter()
@@ -16,6 +22,17 @@ router = APIRouter()
 class LearnTutorIn(BaseModel):
     module_id: str = Field(..., min_length=1, max_length=64)
     question: str = Field(..., min_length=3, max_length=2000)
+
+
+class CommunityPostIn(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=256)
+    title: str = Field(..., min_length=3, max_length=200)
+    body: str = Field(..., min_length=10, max_length=5000)
+
+
+class CommunityReplyIn(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=256)
+    body: str = Field(..., min_length=5, max_length=2000)
 
 
 @router.get("/modules")
@@ -79,6 +96,41 @@ def learn_tutor(body: LearnTutorIn):
         topics,
         body.question,
     )
+
+
+@router.get("/community/risk-preview/{user_id}")
+def learn_community_risk_preview(user_id: str):
+    """Portfolio risk only (no LLM) — for badges in the peer circle."""
+    return community_risk_preview(user_id)
+
+
+@router.get("/community/posts")
+def learn_community_posts():
+    return community_list_posts()
+
+
+@router.post("/community/posts")
+def learn_community_create_post(body: CommunityPostIn):
+    out = community_create_post(body.user_id, body.title, body.body)
+    if out.get("error"):
+        raise HTTPException(
+            status_code=400,
+            detail=out.get("detail") or out.get("error"),
+        )
+    return out
+
+
+@router.post("/community/posts/{post_id}/reply")
+def learn_community_reply(post_id: str, body: CommunityReplyIn):
+    out = community_add_reply(post_id, body.user_id, body.body)
+    if out.get("error") == "not_found":
+        raise HTTPException(status_code=404, detail="Thread not found")
+    if out.get("error"):
+        raise HTTPException(
+            status_code=400,
+            detail=out.get("detail") or out.get("error"),
+        )
+    return out
 
 
 @router.post("/audio/{module_id}")
