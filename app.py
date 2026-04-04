@@ -15,6 +15,7 @@ load_dotenv()  # optional overrides if the shell cwd has another .env
 from backend.routes.router import api_router
 from backend.services.market_service import MARKET_QUOTES_PROVIDER
 from backend.services.news_service import NEWS_PIPELINE_ID
+from backend.utils.env_keys import mistral_key
 
 _DEFAULT_ORIGINS = [
     "http://localhost:5173",
@@ -82,6 +83,8 @@ def root():
 @app.get("/health")
 def health():
     paths = _route_paths()
+    mk = (mistral_key() or "").strip()
+    mistral_loaded = bool(mk and mk.upper() not in ("YOUR_KEY", "NONE", "PLACEHOLDER"))
     return {
         "status": "ok",
         "market_quotes_provider": MARKET_QUOTES_PROVIDER,
@@ -90,4 +93,5 @@ def health():
         "market_ohlc_api_prefix": "/api/market/ohlc" in paths,
         "market_cross_asset": "/market/cross-asset" in paths,
         "ai_explain": "/ai/explain" in paths,
+        "mistral_key_loaded": mistral_loaded,
     }

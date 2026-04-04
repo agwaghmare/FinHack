@@ -222,8 +222,26 @@ function Badge({
   );
 }
 
+type IntegrationStatus = {
+  gnews?: boolean;
+  fred?: boolean;
+  gemini?: boolean;
+  openai?: boolean;
+  mistral?: boolean;
+  elevenlabs?: boolean;
+  clerk_publishable?: boolean;
+  clerk_secret?: boolean;
+  alpaca?: boolean;
+  zapier_webhook?: boolean;
+  twilio_sms?: boolean;
+  twilio_account_sid?: boolean;
+  twilio_auth_token?: boolean;
+  twilio_from_number?: boolean;
+  twilio_alert_to?: boolean;
+};
+
 export function Settings() {
-  const [status, setStatus] = useState<Record<string, boolean> | null>(null);
+  const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -236,7 +254,7 @@ export function Settings() {
       try {
         const [s, h] = await Promise.all([api.integrationStatus().catch(() => ({})), api.health().catch(() => ({}))]);
         if (!cancelled) {
-          setStatus(s);
+          setStatus(s as IntegrationStatus);
           setHealth(h as Health);
         }
       } catch (e) {
@@ -295,6 +313,7 @@ export function Settings() {
               />
               <Badge ok={health.market_cross_asset === true} label="Cross-asset" />
               <Badge ok={health.ai_explain === true} label="/ai/explain" />
+              <Badge ok={health.mistral_key_loaded === true} label="Mistral key (health)" />
             </div>
           </div>
         )}
@@ -318,6 +337,28 @@ export function Settings() {
           <Badge ok={!!s.zapier_webhook} label="Zapier webhook" />
           <Badge ok={!!s.twilio_sms} label="Twilio SMS" />
         </div>
+        {!s.twilio_sms && (
+          <p className="mt-3 max-w-2xl text-xs leading-relaxed text-zinc-500">
+            Twilio SMS sends only when all of these are set in the API <code className="rounded bg-zinc-200/50 px-1 dark:bg-zinc-800">.env</code>:{" "}
+            <code className="text-[11px]">TWILIO_ACCOUNT_SID</code>,{" "}
+            <code className="text-[11px]">TWILIO_AUTH_TOKEN</code> (not the Account SID),{" "}
+            <code className="text-[11px]">TWILIO_FROM_NUMBER</code> (your Twilio number, E.164), and{" "}
+            <code className="text-[11px]">ALERT_SMS_TO</code> (your phone, E.164). Restart uvicorn after edits.
+            {!s.twilio_from_number || !s.twilio_alert_to ? (
+              <>
+                {" "}
+                Missing now: {!s.twilio_from_number ? "from-number " : ""}
+                {!s.twilio_alert_to ? "ALERT_SMS_TO " : ""}
+              </>
+            ) : null}
+          </p>
+        )}
+        {!s.mistral && (
+          <p className="mt-2 max-w-2xl text-xs text-zinc-500">
+            Mistral: set <code className="rounded bg-zinc-200/50 px-1 dark:bg-zinc-800">MISTRAL_API_KEY</code> in the API{" "}
+            <code className="rounded bg-zinc-200/50 px-1 dark:bg-zinc-800">.env</code> (repo root) and restart the server.
+          </p>
+        )}
       </div>
 
       <div className="glass max-w-lg rounded-2xl p-6">

@@ -5,13 +5,12 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 from typing import Any
 
 from backend.services.holdings_service import snapshot
 from backend.services.news_service import get_news_sentiment
 from backend.services.sandbox_store import get_portfolio
-from backend.utils.env_keys import gemini_key, mistral_key, openai_key
+from backend.utils.env_keys import mistral_key, openai_key
 
 logger = logging.getLogger(__name__)
 
@@ -26,89 +25,6 @@ _MISTRAL_KEY_HINT = (
     "Set MISTRAL_API_KEY in the API .env (repo root, next to app.py) and restart uvicorn. "
     "Optional: MISTRAL_MODEL=mistral-small-latest (or another Mistral chat model)."
 )
-_GEMINI_COOLDOWN_UNTIL_TS = 0.0
-_GEMINI_COOLDOWN_SECS = int(os.getenv("GEMINI_QUOTA_COOLDOWN_SECONDS", "120"))
-_GEMINI_LAST_KEY = ""
-
-
-# Omit *-latest aliases — they often 404 on v1beta. Override with GEMINI_MODEL_FALLBACKS=comma,separated
-def _gemini_model_list() -> tuple[str, ...]:
-    raw = os.getenv("GEMINI_MODEL_FALLBACKS", "").strip()
-    if raw:
-        return tuple(m.strip() for m in raw.split(",") if m.strip())
-    # Avoid gemini-1.5-* — many API keys only expose 2.x models on v1beta.
-    return (
-        "gemini-2.5-flash",
-        "gemini-2.0-flash",
-        "gemini-2.0-flash-001",
-    )
-
-
-def _client():
-    from google.genai import Client
-
-    key = gemini_key() or "YOUR_KEY"
-    return Client(api_key=key)
-
-
-def _looks_like_gemini_quota_error(err: Exception) -> bool:
-    s = f"{type(err).__name__}: {err!s}".upper()
-    return "429" in s or "RESOURCE_EXHAUSTED" in s or "QUOTA" in s
-
-
-def _ai_failure_message(*, last_gemini_err: Exception | None, openai_key_configured: bool) -> str:
-    """Clear copy for Insights / trade feedback when all providers fail."""
-    lines: list[str] = []
-
-    if last_gemini_err and _looks_like_gemini_quota_error(last_gemini_err):
-        lines.append(
-            "Gemini returned 429 (RESOURCE_EXHAUSTED): you have hit Google’s quota or rate limit for this API key. "
-            "The key is usually fine — billing or daily free-tier limits are not. "
-            "Open Google AI Studio / Cloud billing for the project that owns the key, or wait for the quota window to reset. "
-            "Docs: https://ai.google.dev/gemini-api/docs/rate-limits"
-        )
-    elif last_gemini_err:
-        lines.append(
-            f"Gemini error after trying all configured models: {type(last_gemini_err).__name__}: {last_gemini_err!s}"[
-                :450
-            ]
-        )
-
-    if not openai_key_configured:
-        lines.append(
-            "OpenAI was not used: set OPENAI_API_KEY in the API .env (repo root, next to app.py) so the app can fall back when Gemini is unavailable."
-        )
-    else:
-        lines.append(
-            "OpenAI fallback was attempted but failed — verify OPENAI_API_KEY, account billing, and rate limits at https://platform.openai.com/account/billing"
-        )
-
-    return "\n\n".join(lines)
-
-
-def _gemini_generate_once_models(prompt: str) -> tuple[str | None, Exception | None, bool]:
-    """
-    Try Gemini models in order. Updates quota cooldown on 429-like errors.
-    Returns (text, last_error, any_quota_error_seen).
-    """
-    global _GEMINI_COOLDOWN_UNTIL_TS
-    c = _client()
-    last_err: Exception | None = None
-    any_quota = False
-    for model in _gemini_model_list():
-        try:
-            r = c.models.generate_content(model=model, contents=prompt)
-            text = (r.text or "").strip()
-            if text:
-                return text, None, False
-        except Exception as e:
-            last_err = e
-            logger.warning("Gemini model %s failed: %s", model, e)
-            if _looks_like_gemini_quota_error(e):
-                any_quota = True
-                _GEMINI_COOLDOWN_UNTIL_TS = time.time() + max(30, _GEMINI_COOLDOWN_SECS)
-            continue
-    return None, last_err, any_quota
 
 
 def _mistral_error_detail(r: Any) -> str:
@@ -213,63 +129,22 @@ def _openai_complete(prompt: str) -> str | None:
 
 
 def _run(prompt: str) -> str:
-    global _GEMINI_COOLDOWN_UNTIL_TS, _GEMINI_LAST_KEY
-    gkey = gemini_key()
-
-    if not gkey and not openai_key():
-        return (
-            "AI is not configured. Set GEMINI_API_KEY or OPENAI_API_KEY in the API .env file "
-            "(repo root, next to app.py), then restart the server. "
-            + DEMO_REPLY
-        )
-
-    # If the operator rotates/switches GEMINI key, clear cooldown immediately.
-    if gkey and gkey != _GEMINI_LAST_KEY:
-        _GEMINI_LAST_KEY = gkey
-        _GEMINI_COOLDOWN_UNTIL_TS = 0.0
-
-    now = time.time()
-    use_gemini = bool(gkey) and now >= _GEMINI_COOLDOWN_UNTIL_TS
-    if use_gemini:
-        try:
-            text, last_err, any_quota = _gemini_generate_once_models(prompt)
-            if text:
-                return text
-            fb = _openai_complete(prompt)
-            if fb:
-                return fb
-            if last_err:
-                logger.exception("Gemini generate failed after model fallbacks")
-                if any_quota or (last_err and _looks_like_gemini_quota_error(last_err)):
-                    return (
-                        "Gemini is temporarily rate-limited (quota). "
-                        "OpenAI fallback is not configured, so showing a demo-style response instead. "
-                        + DEMO_REPLY
-                    )
-                return "AI temporarily unavailable. Showing fallback guidance: " + DEMO_REPLY
-            return "AI returned an empty response. Try again or check API quotas."
-        except Exception as e:
-            logger.exception("Gemini client error")
-            if _looks_like_gemini_quota_error(e):
-                _GEMINI_COOLDOWN_UNTIL_TS = time.time() + max(30, _GEMINI_COOLDOWN_SECS)
-            fb = _openai_complete(prompt)
-            if fb:
-                return fb
-            return "AI temporarily unavailable. Showing fallback guidance: " + DEMO_REPLY
-    elif gkey:
-        # Cooldown mode: skip Gemini calls temporarily after quota/rate-limit hit.
-        fb = _openai_complete(prompt)
-        if fb:
-            return fb
-        wait_s = max(1, int(_GEMINI_COOLDOWN_UNTIL_TS - now))
-        return (
-            f"Gemini quota cooldown active for ~{wait_s}s. "
-            "Using fallback guidance while waiting. "
-            + DEMO_REPLY
-        )
+    text, err = _mistral_chat(prompt)
+    if text:
+        return text
 
     o = _openai_complete(prompt)
-    return o if o else DEMO_REPLY
+    if o:
+        return o
+
+    if err == "__NO_KEY__":
+        return (
+            "AI is not configured. Set MISTRAL_API_KEY (preferred) or OPENAI_API_KEY "
+            "in the API .env (repo root, next to app.py), then restart the server."
+        )
+    if err:
+        return f"Mistral unavailable ({err}). {DEMO_REPLY}"
+    return DEMO_REPLY
 
 
 def _run_mistral_holdings(prompt: str) -> str:

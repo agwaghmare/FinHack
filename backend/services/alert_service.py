@@ -38,7 +38,16 @@ def _send_twilio_sms(body: str) -> tuple[bool, str]:
     from_num = twilio_from_number()
     to = alert_sms_to()
     if not all([sid, token, from_num, to]):
-        return False, "twilio_not_configured"
+        missing = []
+        if not sid:
+            missing.append("TWILIO_ACCOUNT_SID")
+        if not token:
+            missing.append("TWILIO_AUTH_TOKEN")
+        if not from_num:
+            missing.append("TWILIO_FROM_NUMBER")
+        if not to:
+            missing.append("ALERT_SMS_TO")
+        return False, f"twilio_not_configured:missing={','.join(missing)}"
     url = f"https://api.twilio.com/2010-04-01/Accounts/{sid}/Messages.json"
     try:
         r = requests.post(

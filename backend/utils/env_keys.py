@@ -24,7 +24,12 @@ def openai_key() -> str:
 
 
 def mistral_key() -> str:
-    return _get("MISTRAL_API_KEY", "MISTRAL")
+    return _get(
+        "MISTRAL_API_KEY",
+        "MISTRAL",
+        "mistral_api_key",
+        "MISTRAL_KEY",
+    )
 
 
 def gemini_key() -> str:
@@ -61,7 +66,8 @@ def twilio_account_sid() -> str:
 
 
 def twilio_auth_token() -> str:
-    return _get("TWILIO_AUTH_TOKEN", "Twillio", "TWILIO_TOKEN")
+    # Prefer TWILIO_AUTH_TOKEN; legacy "Twillio" was a common typo in .env samples.
+    return _get("TWILIO_AUTH_TOKEN", "TWILIO_AUTH", "Twillio", "TWILIO_TOKEN")
 
 
 def twilio_from_number() -> str:

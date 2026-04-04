@@ -29,13 +29,14 @@ _open = PodcastState()
 _scheduler_started = False
 
 _HARDCODED_MARKET_PARAGRAPH = (
-    "Macro update: Treasury yields and inflation-sensitive sectors remain in focus as traders parse the latest "
-    "economic prints and central-bank tone, with risk assets still reacting sharply to changes in growth and rates "
-    "expectations. Geopolitical headline watch remains active around Red Sea shipping disruptions and broader "
-    "Middle East tensions, both of which can quickly feed into energy prices, freight costs, and global risk "
-    "sentiment. Single-name spotlight: Nike's recent earnings reflected mixed consumer demand dynamics and margin "
-    "pressure from promotions in parts of the business, while management emphasized product cycles and inventory "
-    "discipline as key levers for stabilization into upcoming quarters."
+    "Macro: the tape is still trading the latest U.S. inflation surprise and what it implies for the Federal "
+    "Reserve's rate path — when CPI runs hotter than expected, duration and growth stocks often reprice the same day. "
+    "Earnings spotlight on Nike, ticker NKE: the quarter came in weak on guidance and margins, and that disappointment "
+    "was a meaningful drag on sentiment that helped pull the Dow Jones Industrial Average lower as investors rotated away "
+    "from discretionary retail risk. Single-name risk — Super Micro Computer, ticker SMCI: headline risk around "
+    "leadership, including the chief executive and arrests tied to allegations of smuggling advanced chips — "
+    "exactly the kind of idiosyncratic governance and compliance shock that can gap a semiconductor hardware name "
+    "independent of the macro tape."
 )
 
 

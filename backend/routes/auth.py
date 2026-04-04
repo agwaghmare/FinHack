@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends
 from backend.dependencies.clerk_auth import require_clerk_user
 from backend.services.clerk_service import get_clerk_public_config, get_clerk_user_json
 from backend.utils.env_keys import (
+    alert_sms_to,
     alpaca_key_id,
     alpaca_secret_key,
     clerk_publishable_key,
@@ -19,6 +20,7 @@ from backend.utils.env_keys import (
     openai_key,
     twilio_account_sid,
     twilio_auth_token,
+    twilio_from_number,
     zapier_webhook_url,
 )
 
@@ -41,6 +43,11 @@ def clerk_config() -> dict[str, Any]:
 @router.get("/integration-status")
 def integration_status() -> dict[str, Any]:
     """Which backend integrations have keys set (booleans only — no secret values)."""
+    tw_sid = _configured(twilio_account_sid())
+    tw_tok = _configured(twilio_auth_token())
+    tw_from = _configured(twilio_from_number())
+    tw_to = _configured(alert_sms_to())
+    # SMS can only send when all four are set (matches alert_service._send_twilio_sms).
     return {
         "gnews": _configured(gnews_key()),
         "fred": _configured(fred_key()),
@@ -52,7 +59,11 @@ def integration_status() -> dict[str, Any]:
         "clerk_secret": _configured(clerk_secret_key()),
         "alpaca": _configured(alpaca_key_id()) and _configured(alpaca_secret_key()),
         "zapier_webhook": _configured(zapier_webhook_url()),
-        "twilio_sms": _configured(twilio_account_sid()) and _configured(twilio_auth_token()),
+        "twilio_sms": tw_sid and tw_tok and tw_from and tw_to,
+        "twilio_account_sid": tw_sid,
+        "twilio_auth_token": tw_tok,
+        "twilio_from_number": tw_from,
+        "twilio_alert_to": tw_to,
     }
 
 
