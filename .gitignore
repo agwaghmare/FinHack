@@ -1,3 +1,3 @@
 .env
-venv/
+
 backend/data/holdings_store.json
