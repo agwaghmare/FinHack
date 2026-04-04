@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 from backend.services.ai_extended_service import _run
 
 

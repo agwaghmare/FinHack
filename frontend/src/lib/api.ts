@@ -111,6 +111,11 @@ export const api = {
   /** MV-weighted period returns (1m, ytd, 1y, 5y) from yfinance adjusted closes. */
   portfolioPerformance: (userId: string) =>
     j(`/portfolio/holdings/${encodeURIComponent(userId)}/performance`),
+  /** Holdings equity curve (capital growth over time). */
+  portfolioEquityCurve: (userId: string, period = "1y") =>
+    j(
+      `/portfolio/holdings/${encodeURIComponent(userId)}/equity-curve?period=${encodeURIComponent(period)}`,
+    ),
   insight: (data: unknown) =>
     j("/ai/insight", {
       method: "POST",

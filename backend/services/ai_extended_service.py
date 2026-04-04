@@ -19,7 +19,6 @@ DEMO_REPLY = (
     "Demo mode: set GEMINI_API_KEY or OPENAI_API_KEY for live summaries. "
     "This is placeholder insight text for the hackathon UI."
 )
-# Shorter hint for coach/tutor — avoid stacking DEMO_REPLY on top of a long specific error.
 _ENV_KEY_HINT = (
     "Set GEMINI_API_KEY and/or OPENAI_API_KEY in the API .env (repo root, next to app.py) and restart uvicorn."
 )
@@ -30,6 +29,7 @@ _MISTRAL_KEY_HINT = (
 _GEMINI_COOLDOWN_UNTIL_TS = 0.0
 _GEMINI_COOLDOWN_SECS = int(os.getenv("GEMINI_QUOTA_COOLDOWN_SECONDS", "120"))
 _GEMINI_LAST_KEY = ""
+
 
 # Omit *-latest aliases — they often 404 on v1beta. Override with GEMINI_MODEL_FALLBACKS=comma,separated
 def _gemini_model_list() -> tuple[str, ...]:
@@ -147,9 +147,9 @@ def _mistral_chat(prompt: str, *, system: str | None = None) -> tuple[str | None
     messages.append({"role": "user", "content": (prompt or "").strip()})
     if not messages[-1]["content"]:
         return None, "empty user message"
-    try:
-        import httpx
+    import httpx
 
+    try:
         r = httpx.post(
             "https://api.mistral.ai/v1/chat/completions",
             headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
@@ -343,6 +343,7 @@ def trade_feedback(user_id: str) -> dict[str, Any]:
     prompt = f"""Review simulated trading activity: comment on frequency, concentration, and discipline.
 {p}
 Under 120 words."""
+    # Paper/sandbox AI feedback should remain Gemini-driven.
     return {"user_id": user_id, "feedback": _run(prompt)}
 
 

@@ -1,20 +1,3 @@
-# Secrets
 .env
-.env.*
-!.env.example
 
-# Python
-.venv/
-venv/
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Node / Vite
-frontend/node_modules/
-frontend/dist/
-
-# Local sandbox / runtime data (from archit)
 backend/data/holdings_store.json
-
-.DS_Store

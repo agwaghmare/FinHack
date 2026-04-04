@@ -2,12 +2,8 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import {
   Loader2,
   Mic,
-  Minus,
   PieChart,
   Search,
-  Sparkles,
-  TrendingDown,
-  TrendingUp,
   X,
 } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
@@ -15,12 +11,10 @@ import { Link } from "react-router-dom";
 import {
   api,
   getMarketPodcastLatest,
-  getMarketPodcastLatestScript,
   postMarketAudioSummary,
   postMarketPodcastGenerate,
   type PodcastSession,
 } from "../lib/api";
-import { CandlestickPanel } from "../components/CandlestickPanel";
 import { PodcastPlayer } from "../components/PodcastPlayer";
 import { StockInfoPanel } from "../components/StockInfoPanel";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
@@ -32,55 +26,59 @@ type Quote = {
   change_percent?: string;
   error?: string;
   long_name?: string;
+  why_today?: string;
   source?: string;
 };
 
-type NewsArticle = {
-  title?: string;
-  url?: string;
-  summary?: string;
-  overall_sentiment_label?: string;
-  overall_sentiment_score?: number;
+type CompareRow = {
+  symbol: string;
+  longName?: string;
+  sector?: string;
+  perf1m?: number | null;
+  perf6m?: number | null;
+  perf1y?: number | null;
+  trend?: "up" | "down" | "flat";
 };
 
-function sentimentAccent(label: string | undefined) {
-  const u = (label ?? "").toLowerCase();
-  if (u.includes("bull"))
-    return {
-      border: "border-l-emerald-500",
-      badge: "bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-500/30",
-      Icon: TrendingUp,
-    };
-  if (u.includes("bear"))
-    return {
-      border: "border-l-rose-500",
-      badge: "bg-rose-500/15 text-rose-300 ring-1 ring-rose-500/30",
-      Icon: TrendingDown,
-    };
-  return {
-    border: "border-l-zinc-500",
-    badge: "bg-zinc-500/15 text-zinc-300 ring-1 ring-zinc-500/30",
-    Icon: Minus,
-  };
+function pctBetween(now: number, prev: number) {
+  if (!Number.isFinite(now) || !Number.isFinite(prev) || prev <= 0) return null;
+  return ((now / prev - 1) * 100);
 }
 
-function CandlestickDecor() {
-  return (
-    <svg
-      viewBox="0 0 120 48"
-      className="h-12 w-32 shrink-0 text-zinc-600"
-      aria-hidden
-    >
-      <rect x="8" y="18" width="10" height="22" fill="currentColor" opacity="0.35" rx="1" />
-      <line x1="13" y1="8" x2="13" y2="40" stroke="currentColor" strokeWidth="2" />
-      <rect x="34" y="10" width="10" height="30" fill="currentColor" opacity="0.55" rx="1" />
-      <line x1="39" y1="4" x2="39" y2="44" stroke="currentColor" strokeWidth="2" />
-      <rect x="60" y="20" width="10" height="18" fill="currentColor" opacity="0.4" rx="1" />
-      <line x1="65" y1="12" x2="65" y2="42" stroke="currentColor" strokeWidth="2" />
-      <rect x="86" y="14" width="10" height="26" fill="currentColor" opacity="0.5" rx="1" />
-      <line x1="91" y1="6" x2="91" y2="44" stroke="currentColor" strokeWidth="2" />
-    </svg>
-  );
+function perfFromBars(rawBars: unknown): { perf1m: number | null; perf6m: number | null; perf1y: number | null; trend: CompareRow["trend"] } {
+  const bars = Array.isArray(rawBars) ? rawBars : [];
+  const closes = bars
+    .map((b) => {
+      if (!b || typeof b !== "object") return null;
+      const c = Number((b as { close?: unknown }).close);
+      return Number.isFinite(c) ? c : null;
+    })
+    .filter((v): v is number => v != null);
+  if (closes.length < 5) return { perf1m: null, perf6m: null, perf1y: null, trend: "flat" };
+  const last = closes[closes.length - 1];
+  const m1 = closes[Math.max(0, closes.length - 22)];
+  const m6 = closes[Math.max(0, closes.length - 126)];
+  const y1 = closes[Math.max(0, closes.length - 252)];
+  const perf1m = pctBetween(last, m1);
+  const perf6m = pctBetween(last, m6);
+  const perf1y = pctBetween(last, y1);
+  const trend = perf6m == null ? "flat" : perf6m > 3 ? "up" : perf6m < -3 ? "down" : "flat";
+  return { perf1m, perf6m, perf1y, trend };
+}
+
+function barsPerf(rawBars: unknown, stepsBack: number): number | null {
+  const bars = Array.isArray(rawBars) ? rawBars : [];
+  const closes = bars
+    .map((b) => {
+      if (!b || typeof b !== "object") return null;
+      const c = Number((b as { close?: unknown }).close);
+      return Number.isFinite(c) ? c : null;
+    })
+    .filter((v): v is number => v != null);
+  if (closes.length < 3) return null;
+  const now = closes[closes.length - 1];
+  const prev = closes[Math.max(0, closes.length - 1 - stepsBack)];
+  return pctBetween(now, prev);
 }
 
 const MARKET_CAP_LEADERS = [
@@ -175,7 +173,7 @@ function CapLeaderCard({
           <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
             {q.kind ?? "equity"}
           </p>
-          <p className="truncate text-lg font-semibold text-zinc-100">{q.symbol ?? "—"}</p>
+          <p className="truncate text-base font-semibold text-zinc-100">{q.symbol ?? "—"}</p>
           {name ? <p className="truncate text-[10px] text-zinc-500">{name}</p> : null}
         </div>
         <div onClick={(e) => e.stopPropagation()} className="shrink-0">
@@ -192,7 +190,7 @@ function CapLeaderCard({
         </div>
       </div>
       <p
-        className={`mt-2 text-2xl font-semibold tabular-nums ${up ? "text-emerald-400" : "text-rose-400"}`}
+        className={`mt-2 text-xl font-semibold tabular-nums ${up ? "text-emerald-400" : "text-rose-400"}`}
       >
         {q.error ? "—" : px}
       </p>
@@ -268,17 +266,67 @@ type PortfolioPerfPayload = {
   message?: string;
 };
 
+type PortfolioCurvePayload = {
+  has_positions?: boolean;
+  period?: string;
+  points?: Array<{
+    date: string;
+    value: number;
+    growth_pct?: number | null;
+  }>;
+  start_value?: number;
+  end_value?: number;
+  as_of?: string;
+  message?: string;
+};
+
 function fmtReturnPct(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return "—";
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toFixed(2)}%`;
 }
 
+function moverWhyText(q: Quote) {
+  const sym = q.symbol ?? "This stock";
+  const ch = Number.parseFloat(q.change_percent ?? "0");
+  const up = ch >= 0;
+  if (Math.abs(ch) >= 8) {
+    return `${sym} is making an outsized move; likely earnings/news or a major repricing event.`;
+  }
+  if (Math.abs(ch) >= 4) {
+    return `${sym} is moving on notable momentum, sector sympathy, or fresh headlines today.`;
+  }
+  return up
+    ? `${sym} is up on broad risk-on flows and name-specific momentum signals.`
+    : `${sym} is down as sellers price in risk, weak guidance tone, or position unwinds.`;
+}
+
+function portfolioLinePoints(values: number[]) {
+  if (values.length === 0) return "";
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const span = max - min || 1;
+  return values
+    .map((v, i) => {
+      const x = values.length === 1 ? 160 : (i / (values.length - 1)) * 320;
+      const y = 100 - ((v - min) / span) * 88;
+      return `${x.toFixed(1)},${(y + 8).toFixed(1)}`;
+    })
+    .join(" ");
+}
+
+function portfolioLineArea(values: number[]) {
+  const points = portfolioLinePoints(values);
+  if (!points) return "";
+  const firstX = values.length === 1 ? 160 : 0;
+  const lastX = values.length === 1 ? 160 : 320;
+  return `${firstX},108 ${points} ${lastX},108`;
+}
+
 export function Market() {
   const { user, isLoaded: clerkLoaded } = useUser();
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [chartSymbol, setChartSymbol] = useState("NVDA");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [audioBusy, setAudioBusy] = useState(false);
   const [podcastCloseUrl, setPodcastCloseUrl] = useState<string | null>(null);
@@ -286,23 +334,20 @@ export function Market() {
   const [podcastBusy, setPodcastBusy] = useState(false);
   const [podcastCloseAt, setPodcastCloseAt] = useState<string | null>(null);
   const [podcastOpenAt, setPodcastOpenAt] = useState<string | null>(null);
-  const [podcastCloseScript, setPodcastCloseScript] = useState<string | null>(null);
-  const [podcastOpenScript, setPodcastOpenScript] = useState<string | null>(null);
   const [expandedMover, setExpandedMover] = useState<string | null>(null);
   const [expandedLeader, setExpandedLeader] = useState<string | null>(null);
   const [movers, setMovers] = useState<Quote[]>([]);
   const [capLeaders, setCapLeaders] = useState<Quote[]>([]);
-  const [news, setNews] = useState<{
-    avg_sentiment?: number;
-    articles?: NewsArticle[];
-    error?: string;
-    api_message?: string;
-  } | null>(null);
   const [portfolioPerf, setPortfolioPerf] = useState<PortfolioPerfPayload | null>(null);
+  const [portfolioCurve, setPortfolioCurve] = useState<PortfolioCurvePayload | null>(null);
   const [portfolioPerfLoading, setPortfolioPerfLoading] = useState(false);
   const [stockLookupInput, setStockLookupInput] = useState("");
   const [stockLookupOpen, setStockLookupOpen] = useState(false);
   const [stockModalSymbol, setStockModalSymbol] = useState("");
+  const [compareInput, setCompareInput] = useState("");
+  const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
+  const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
+  const [compareLoading, setCompareLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -310,7 +355,7 @@ export function Market() {
       try {
         const [px, yahooMovers, moverBatch, capBatch] = await Promise.all([
           api.marketPrices("SPY,QQQ,DIA,IWM,BTC,ETH"),
-          api.marketMovers(10).catch(() => null),
+          api.marketMovers(5).catch(() => null),
           api.marketPrices(MOVER_UNIVERSE.join(",")),
           api.marketPrices(MARKET_CAP_LEADERS.join(",")),
         ]);
@@ -349,17 +394,25 @@ export function Market() {
   useEffect(() => {
     if (!clerkLoaded || !user?.id) {
       setPortfolioPerf(null);
+      setPortfolioCurve(null);
       return;
     }
     let cancelled = false;
     setPortfolioPerfLoading(true);
-    api
-      .portfolioPerformance(user.id)
-      .then((r) => {
-        if (!cancelled) setPortfolioPerf(r as PortfolioPerfPayload);
+    Promise.all([
+      api.portfolioPerformance(user.id),
+      api.portfolioEquityCurve(user.id, "1y"),
+    ])
+      .then(([perf, curve]) => {
+        if (cancelled) return;
+        setPortfolioPerf(perf as PortfolioPerfPayload);
+        setPortfolioCurve(curve as PortfolioCurvePayload);
       })
       .catch(() => {
-        if (!cancelled) setPortfolioPerf(null);
+        if (!cancelled) {
+          setPortfolioPerf(null);
+          setPortfolioCurve(null);
+        }
       })
       .finally(() => {
         if (!cancelled) setPortfolioPerfLoading(false);
@@ -379,21 +432,44 @@ export function Market() {
   }, [stockLookupOpen]);
 
   useEffect(() => {
+    if (!stockLookupOpen || !stockModalSymbol) return;
+    const base = stockModalSymbol.trim().toUpperCase();
+    const chosen = compareSymbols.length > 0 ? compareSymbols : [base, "SPY"];
     let cancelled = false;
+    setCompareLoading(true);
     (async () => {
       try {
-        const r = await api.marketNews("SPY", 8);
-        if (!cancelled) {
-          setNews(r as { avg_sentiment?: number; articles?: NewsArticle[] });
-        }
+        const rows = await Promise.all(
+          chosen.map(async (sym) => {
+            const [infoRaw, histRaw] = await Promise.all([
+              api.stockInfo(sym).catch(() => ({})),
+              api.marketHistory(sym, "1y", "1d").catch(() => ({})),
+            ]);
+            const info = infoRaw as { long_name?: string; sector?: string };
+            const hist = histRaw as { bars?: unknown[] };
+            const perf = perfFromBars(hist.bars);
+            return {
+              symbol: sym,
+              longName: info.long_name,
+              sector: info.sector,
+              perf1m: barsPerf(hist.bars, 22) ?? perf.perf1m,
+              perf6m: barsPerf(hist.bars, 126) ?? perf.perf6m,
+              perf1y: barsPerf(hist.bars, 252) ?? perf.perf1y,
+              trend: perf.trend,
+            } as CompareRow;
+          }),
+        );
+        if (!cancelled) setCompareRows(rows);
       } catch {
-        if (!cancelled) setNews(null);
+        if (!cancelled) setCompareRows([]);
+      } finally {
+        if (!cancelled) setCompareLoading(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [stockLookupOpen, stockModalSymbol, compareSymbols]);
 
   useEffect(() => {
     let cancelled = false;
@@ -409,14 +485,12 @@ export function Market() {
               return url;
             });
             setPodcastCloseAt(out.generatedAt ?? null);
-            setPodcastCloseScript(null);
           } else {
             setPodcastOpenUrl((prev) => {
               if (prev) URL.revokeObjectURL(prev);
               return url;
             });
             setPodcastOpenAt(out.generatedAt ?? null);
-            setPodcastOpenScript(null);
           }
         } catch {
           if (cancelled) return;
@@ -425,27 +499,13 @@ export function Market() {
               if (prev) URL.revokeObjectURL(prev);
               return null;
             });
-            try {
-              const sOut = await getMarketPodcastLatestScript("close");
-              setPodcastCloseAt(sOut.generatedAt ?? null);
-              setPodcastCloseScript(sOut.script ?? null);
-            } catch {
-              setPodcastCloseAt(null);
-              setPodcastCloseScript(null);
-            }
+            setPodcastCloseAt(null);
           } else {
             setPodcastOpenUrl((prev) => {
               if (prev) URL.revokeObjectURL(prev);
               return null;
             });
-            try {
-              const sOut = await getMarketPodcastLatestScript("open");
-              setPodcastOpenAt(sOut.generatedAt ?? null);
-              setPodcastOpenScript(sOut.script ?? null);
-            } catch {
-              setPodcastOpenAt(null);
-              setPodcastOpenScript(null);
-            }
+            setPodcastOpenAt(null);
           }
         }
       };
@@ -466,11 +526,10 @@ export function Market() {
     }
   }, []);
 
-  const { etfQ, cryptoQ, stockQ } = useMemo(() => {
+  const { etfQ, cryptoQ } = useMemo(() => {
     const etf = new Set(["SPY", "QQQ", "DIA", "IWM"]);
     const eq: Quote[] = [];
     const cr: Quote[] = [];
-    const st: Quote[] = [];
     for (const q of quotes) {
       const sym = (q.symbol ?? "").toUpperCase();
       const base = sym.replace(/\/USD.*/, "");
@@ -483,11 +542,9 @@ export function Market() {
       }
       if (etf.has(base)) {
         eq.push(q);
-      } else {
-        st.push(q);
       }
     }
-    return { etfQ: eq, cryptoQ: cr, stockQ: st };
+    return { etfQ: eq, cryptoQ: cr };
   }, [quotes]);
 
   async function playDashboardAudio() {
@@ -500,10 +557,7 @@ export function Market() {
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       setAudioUrl(url);
     } catch {
-      const u = new SpeechSynthesisUtterance(
-        "ElevenLabs MP3 was unavailable. Add a paid ElevenLabs API plan or use browser speech from Settings help text.",
-      );
-      window.speechSynthesis.speak(u);
+      setAudioUrl(null);
     } finally {
       setAudioBusy(false);
     }
@@ -514,7 +568,18 @@ export function Market() {
     const s = stockLookupInput.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
     if (!s) return;
     setStockModalSymbol(s);
+    setCompareInput(`${s},SPY,QQQ`);
+    setCompareSymbols([s, "SPY", "QQQ"]);
     setStockLookupOpen(true);
+  }
+
+  function applyComparisonSymbols() {
+    const parsed = compareInput
+      .split(",")
+      .map((x) => x.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""))
+      .filter(Boolean);
+    if (parsed.length === 0) return;
+    setCompareSymbols(Array.from(new Set(parsed)).slice(0, 4));
   }
 
   async function generatePodcastNow(session: PodcastSession) {
@@ -525,43 +590,34 @@ export function Market() {
         const out = await getMarketPodcastLatest(session);
         if (session === "close") {
           setPodcastCloseAt(out.generatedAt ?? null);
-          setPodcastCloseScript(null);
           setPodcastCloseUrl((prev) => {
             if (prev) URL.revokeObjectURL(prev);
             return URL.createObjectURL(out.audio);
           });
         } else {
           setPodcastOpenAt(out.generatedAt ?? null);
-          setPodcastOpenScript(null);
           setPodcastOpenUrl((prev) => {
             if (prev) URL.revokeObjectURL(prev);
             return URL.createObjectURL(out.audio);
           });
         }
       } catch {
-        const sOut = await getMarketPodcastLatestScript(session);
         if (session === "close") {
-          setPodcastCloseAt(sOut.generatedAt ?? null);
+          setPodcastCloseAt(null);
           setPodcastCloseUrl((prev) => {
             if (prev) URL.revokeObjectURL(prev);
             return null;
           });
-          setPodcastCloseScript(sOut.script ?? null);
         } else {
-          setPodcastOpenAt(sOut.generatedAt ?? null);
+          setPodcastOpenAt(null);
           setPodcastOpenUrl((prev) => {
             if (prev) URL.revokeObjectURL(prev);
             return null;
           });
-          setPodcastOpenScript(sOut.script ?? null);
         }
       }
     } catch {
-      window.speechSynthesis.speak(
-        new SpeechSynthesisUtterance(
-          "Market podcast is not available yet. Configure ElevenLabs on the server and try again.",
-        ),
-      );
+      // No browser TTS fallback: keep podcasts human-only audio.
     } finally {
       setPodcastBusy(false);
     }
@@ -608,8 +664,8 @@ export function Market() {
           <p className="mt-2 max-w-2xl text-sm text-zinc-500">
             Part of our <span className="text-zinc-400">research &amp; education</span> story: live tape for stocks,
             crypto, and ETFs. CPI, Fed funds, and GDP on{" "}
-            <Link className="text-zinc-300 underline underline-offset-2" to="/commodities">
-              Commodity Lens
+            <Link className="text-zinc-300 underline underline-offset-2" to="/macro-regime">
+              Macro Regime
             </Link>
             ; concepts &amp; tutor in{" "}
             <Link className="text-zinc-300 underline underline-offset-2" to="/learn">
@@ -634,360 +690,332 @@ export function Market() {
       </header>
 
       <section className="glass rounded-2xl p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <PieChart className="h-4 w-4 text-amber-400" />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-5 lg:col-span-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-              Your portfolio · performance so far
+              Market open + close podcast rectangle
             </h2>
-          </div>
-          <Link
-            to="/portfolio"
-            className="text-xs font-semibold text-amber-500/90 underline-offset-2 hover:underline"
-          >
-            Edit holdings
-          </Link>
-        </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          Market-value weighted total return from adjusted closes (approximation). Periods: 1Y, 5Y, 1M, YTD.
-        </p>
-        {!clerkLoaded ? (
-          <p className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
-          </p>
-        ) : !user ? (
-          <p className="mt-4 text-sm text-zinc-400">
-            Sign in to see performance for positions saved under{" "}
-            <Link className="text-amber-500/90 underline" to="/portfolio">
-              My portfolio
-            </Link>
-            .
-          </p>
-        ) : portfolioPerfLoading ? (
-          <p className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading your performance…
-          </p>
-        ) : portfolioPerf?.has_positions ? (
-          <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {(
-              [
-                { k: "1y" as const, label: "1Y" },
-                { k: "5y" as const, label: "5Y" },
-                { k: "1m" as const, label: "1M" },
-                { k: "ytd" as const, label: "YTD" },
-              ] as const
-            ).map(({ k, label }) => {
-              const v = portfolioPerf.periods?.[k];
-              const num = typeof v === "number" ? v : null;
-              const up = num != null && num >= 0;
-              return (
-                <div
-                  key={k}
-                  className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-3 text-center"
-                >
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                    {label}
-                  </p>
-                  <p
-                    className={`mt-1 text-lg font-semibold tabular-nums ${
-                      num == null ? "text-zinc-500" : up ? "text-emerald-400" : "text-rose-400"
-                    }`}
-                  >
-                    {fmtReturnPct(num)}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-zinc-400">
-            {portfolioPerf?.message ??
-              "Add priced positions under My portfolio to see period returns."}
-          </p>
-        )}
-      </section>
-
-      <section className="grid gap-4 lg:grid-cols-3">
-        <div className="glass rounded-2xl p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Market open · audio briefing
-          </h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Scheduled <span className="font-semibold text-zinc-200">9:35am</span> ET weekdays. Uses ElevenLabs
-            (warmer voice defaults on the server). Generate manually if the schedule has not run yet.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={podcastBusy}
-              onClick={() => generatePodcastNow("open")}
-              className="rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-50"
-            >
-              {podcastBusy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                "Generate open"
-              )}
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-zinc-500">
-            {podcastOpenAt ? `Last generated: ${podcastOpenAt}` : "Not generated yet."}
-          </p>
-          <PodcastPlayer
-            audioUrl={podcastOpenUrl}
-            scriptText={podcastOpenScript}
-            title="Market open"
-          />
-        </div>
-        <div className="glass rounded-2xl p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Market close · recap
-          </h2>
-          <p className="mt-2 text-sm text-zinc-400">
-            Scheduled <span className="font-semibold text-zinc-200">4:05pm</span> ET weekdays. Full tape, movers,
-            leaders, and headline sentiment.
-          </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              disabled={podcastBusy}
-              onClick={() => generatePodcastNow("close")}
-              className="rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-50"
-            >
-              {podcastBusy ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                "Generate close"
-              )}
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-zinc-500">
-            {podcastCloseAt ? `Last generated: ${podcastCloseAt}` : "Not generated yet."}
-          </p>
-          <PodcastPlayer
-            audioUrl={podcastCloseUrl}
-            scriptText={podcastCloseScript}
-            title="Market close"
-          />
-        </div>
-        <div className="glass rounded-2xl p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            What you’ll hear (daily)
-          </h2>
-          <ul className="mt-3 space-y-2 text-xs leading-relaxed text-zinc-400">
-            <li>
-              <span className="font-medium text-zinc-300">Macro:</span> one line from the broad macro headline set
-            </li>
-            <li>
-              <span className="font-medium text-zinc-300">Sector:</span> one industry or theme story
-            </li>
-            <li>
-              <span className="font-medium text-zinc-300">International:</span> overseas or FX-relevant angle
-            </li>
-            <li>
-              <span className="font-medium text-zinc-300">Geopolitical:</span> policy or conflict channel into markets
-            </li>
-            <li>
-              <span className="font-medium text-zinc-300">Two names:</span> earnings or single-stock catalysts
-            </li>
-            <li>
-              <span className="font-medium text-zinc-300">Tape + sentiment:</span> movers, mega-caps, and aggregated tone
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <section className="glass rounded-2xl p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          News & sentiment (SPY)
-        </h2>
-        {news ? (
-          <div className="mt-4 space-y-4">
-            {news.error && (
-              <p className="rounded-lg border border-red-500/30 bg-red-950/30 px-3 py-2 text-xs text-red-200">
-                {news.error}
-              </p>
-            )}
-            {news.api_message && (
-              <p className="rounded-lg border border-amber-500/30 bg-amber-950/30 px-3 py-2 text-xs text-amber-100">
-                {news.api_message}
-              </p>
-            )}
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch">
-              <div className="flex flex-1 flex-col gap-3 rounded-xl border border-zinc-800/80 bg-gradient-to-br from-zinc-900/80 to-zinc-950/40 p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <CandlestickDecor />
-                    <div>
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-                        Lexical headline score
-                      </p>
-                      <p className="text-lg font-semibold text-zinc-100">
-                        {typeof news.avg_sentiment === "number" ? news.avg_sentiment.toFixed(2) : "—"}
-                      </p>
-                    </div>
-                  </div>
-                  <PieChart className="h-8 w-8 text-zinc-600" aria-hidden />
-                </div>
-                <p className="text-xs text-zinc-500">
-                  Simple keyword balance on titles (not an ML model). <strong className="text-zinc-300">0.00</strong> means
-                  neutral — no strong bullish or bearish words dominated the sample. Hover a headline for summary + URL.
+            <p className="mt-2 text-xs text-zinc-500">
+              Morning setup and close recap in one wide panel.
+            </p>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Market open · 9:35am ET</h3>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Scheduled weekdays. Generate manually if it has not run yet.
                 </p>
-                <div className="relative h-3 w-full overflow-hidden rounded-full bg-zinc-800">
-                  <div
-                    className="absolute inset-y-0 left-0 w-full bg-gradient-to-r from-rose-600 via-zinc-500 to-emerald-500 opacity-90"
-                    aria-hidden
-                  />
-                  <div
-                    className="absolute top-0 h-3 w-1.5 -translate-x-1/2 rounded-sm bg-white shadow-md ring-2 ring-zinc-900"
-                    style={{
-                      left: `${Math.min(100, Math.max(0, (((news.avg_sentiment ?? 0) + 1) / 2) * 100))}%`,
-                    }}
-                    title="Average sentiment position"
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <WhyMattersButton
-                    label="Why sentiment?"
-                    context={{
-                      kind: "quote",
-                      symbol: "SPY",
-                      label: "News sentiment (SPY basket)",
-                      value: `Average score ${typeof news.avg_sentiment === "number" ? news.avg_sentiment.toFixed(2) : "—"}`,
-                      user_note: "Headline NLP is noisy; use it as context, not a trigger by itself.",
-                    }}
-                  />
-                  <span className="text-xs text-zinc-500">
-                    Risk-on vs risk-off positioning often tracks tone.
-                  </span>
-                </div>
+                <button
+                  type="button"
+                  disabled={podcastBusy}
+                  onClick={() => generatePodcastNow("open")}
+                  className="mt-3 rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-50"
+                >
+                  {podcastBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Generate open"}
+                </button>
+                <p className="mt-2 text-[11px] text-zinc-500">
+                  {podcastOpenAt ? `Last generated: ${podcastOpenAt}` : "Not generated yet."}
+                </p>
+                <PodcastPlayer audioUrl={podcastOpenUrl} title="Market open" />
+              </div>
+              <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Market close · 4:05pm ET</h3>
+                <p className="mt-2 text-xs text-zinc-500">
+                  Recap for movers, leaders, and sentiment.
+                </p>
+                <button
+                  type="button"
+                  disabled={podcastBusy}
+                  onClick={() => generatePodcastNow("close")}
+                  className="mt-3 rounded-full border border-zinc-700 px-4 py-2 text-xs font-semibold text-zinc-300 hover:border-zinc-500 hover:text-zinc-100 disabled:opacity-50"
+                >
+                  {podcastBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Generate close"}
+                </button>
+                <p className="mt-2 text-[11px] text-zinc-500">
+                  {podcastCloseAt ? `Last generated: ${podcastCloseAt}` : "Not generated yet."}
+                </p>
+                <PodcastPlayer audioUrl={podcastCloseUrl} title="Market close" />
               </div>
             </div>
-            <div className="space-y-2">
-              {(news.articles ?? []).slice(0, 6).map((a, i) => {
-                const acc = sentimentAccent(a.overall_sentiment_label);
-                const Icon = acc.Icon;
-                const href = (a.url && a.url !== "#" ? a.url : undefined) ?? "#";
-                const tip = a.summary?.trim()
-                  ? `${a.summary.slice(0, 220)}${a.summary.length > 220 ? "…" : ""}\n\n${href}`
-                  : href;
-                return (
-                  <a
-                    key={`${a.url ?? "u"}-${i}`}
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    title={tip}
-                    className={`block rounded-xl border border-zinc-800 border-l-4 ${acc.border} bg-zinc-900/40 px-3 py-2.5 text-left text-sm text-zinc-100 shadow-sm transition hover:bg-zinc-900/70`}
-                  >
-                    <div className="flex items-start gap-2">
-                      <span
-                        className={`mt-0.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${acc.badge}`}
-                      >
-                        <Icon className="h-3 w-3" />
-                        {a.overall_sentiment_label ?? "Neutral"}
-                      </span>
-                    </div>
-                    <span className="mt-1 block font-medium leading-snug text-zinc-100 underline-offset-2 hover:underline">
-                      {a.title ?? "Untitled headline"}
-                    </span>
-                    {a.summary ? (
-                      <span className="mt-1 block line-clamp-2 text-xs text-zinc-500">{a.summary}</span>
-                    ) : null}
-                  </a>
-                );
-              })}
-            </div>
           </div>
-        ) : (
-          <p className="mt-3 text-sm text-zinc-500">
-            News sentiment currently unavailable. This is often due to external API throttling.
-          </p>
-        )}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">What you’ll hear (daily)</h2>
+            <ul className="mt-3 space-y-2 text-xs leading-relaxed text-zinc-400">
+              <li><span className="font-medium text-zinc-300">Macro:</span> broad macro headlines</li>
+              <li><span className="font-medium text-zinc-300">Sector:</span> one industry/theme update</li>
+              <li><span className="font-medium text-zinc-300">International:</span> overseas or FX angle</li>
+              <li><span className="font-medium text-zinc-300">Geopolitical:</span> policy/conflict impact</li>
+              <li><span className="font-medium text-zinc-300">Two names:</span> single-stock catalysts</li>
+              <li><span className="font-medium text-zinc-300">Tape + sentiment:</span> movers and tone</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
-      <section className="glass rounded-2xl p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Top market movers
-        </h2>
-        <p className="mt-1 text-xs text-zinc-500">
-          Yahoo Finance · Day gainers. Tap a row for candlesticks, business summary, and valuation fields.
-        </p>
-        <div className="mt-3 space-y-2 text-sm">
-          {movers.length === 0 ? (
-            <p className="text-zinc-500">Loading movers...</p>
-          ) : (
-            movers.map((x) => {
-              const ch = Number.parseFloat(x.change_percent ?? "0");
-              const up = ch >= 0;
-              const sym = x.symbol ?? "";
-              const open = expandedMover === sym;
-              return (
-                <div key={sym} className="rounded-lg border border-zinc-800/60 bg-zinc-900/40">
-                  <button
-                    type="button"
-                    className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-zinc-900/70"
-                    onClick={() => setExpandedMover((prev) => (prev === sym ? null : sym))}
-                  >
-                    <div className="min-w-0">
-                      <span className="font-semibold text-zinc-100">{sym}</span>
-                      {x.long_name ? (
-                        <p className="truncate text-[10px] text-zinc-500" title={x.long_name}>
-                          {x.long_name}
-                        </p>
-                      ) : null}
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2 text-right">
-                      {typeof x.price === "number" ? (
-                        <span className="hidden text-xs text-zinc-500 sm:inline">
-                          ${x.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                        </span>
-                      ) : null}
-                      <span
-                        className={`tabular-nums font-semibold ${up ? "text-emerald-400" : "text-rose-400"}`}
+      <section className="grid gap-4 xl:grid-cols-2">
+        <div className="glass rounded-2xl p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <PieChart className="h-4 w-4 text-amber-400" />
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+                Your portfolio · performance so far
+              </h2>
+            </div>
+            <Link
+              to="/portfolio"
+              className="text-xs font-semibold text-amber-500/90 underline-offset-2 hover:underline"
+            >
+              Edit holdings
+            </Link>
+          </div>
+          <p className="mt-2 text-xs text-zinc-500">
+            Market-value weighted total return from adjusted closes (approximation). Periods: 1Y, 5Y, 1M, YTD.
+          </p>
+          {!clerkLoaded ? (
+            <p className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+            </p>
+          ) : !user ? (
+            <p className="mt-4 text-sm text-zinc-400">
+              Sign in to see performance for positions saved under{" "}
+              <Link className="text-amber-500/90 underline" to="/portfolio">
+                My portfolio
+              </Link>
+              .
+            </p>
+          ) : portfolioPerfLoading ? (
+            <p className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading your performance…
+            </p>
+          ) : portfolioPerf?.has_positions ? (
+            <>
+              <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                {(
+                  [
+                    { k: "1y" as const, label: "1Y" },
+                    { k: "5y" as const, label: "5Y" },
+                    { k: "1m" as const, label: "1M" },
+                    { k: "ytd" as const, label: "YTD" },
+                  ] as const
+                ).map(({ k, label }) => {
+                  const v = portfolioPerf.periods?.[k];
+                  const num = typeof v === "number" ? v : null;
+                  const up = num != null && num >= 0;
+                  return (
+                    <div
+                      key={k}
+                      className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-3 text-center"
+                    >
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
+                        {label}
+                      </p>
+                      <p
+                        className={`mt-1 text-lg font-semibold tabular-nums ${
+                          num == null ? "text-zinc-500" : up ? "text-emerald-400" : "text-rose-400"
+                        }`}
                       >
-                        {up ? "+" : ""}
-                        {x.change_percent ?? "0"}%
-                      </span>
-                      <span className="text-[10px] text-zinc-500">{open ? "▲" : "▼"}</span>
+                        {fmtReturnPct(num)}
+                      </p>
                     </div>
-                  </button>
-                  {open && sym ? (
-                    <div className="border-t border-zinc-800/80 px-3 pb-4 pt-2">
-                      <StockInfoPanel symbol={sym} showChart chartPeriod="1y" />
+                  );
+                })}
+              </div>
+              {portfolioCurve?.has_positions && (portfolioCurve.points?.length ?? 0) > 1 ? (
+                <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+                  <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Equity curve (capital growth)
+                  </p>
+                  <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2">
+                    <svg viewBox="0 0 320 120" className="h-32 w-full" role="img" aria-label="Portfolio line graph">
+                      <defs>
+                        <linearGradient id="equityFill" x1="0" x2="0" y1="0" y2="1">
+                          <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.28" />
+                          <stop offset="100%" stopColor="#f59e0b" stopOpacity="0.02" />
+                        </linearGradient>
+                      </defs>
+                      <line x1="0" y1="108" x2="320" y2="108" className="stroke-zinc-700" strokeWidth="1" />
+                      <polygon
+                        points={portfolioLineArea((portfolioCurve.points ?? []).map((x) => x.value))}
+                        fill="url(#equityFill)"
+                      />
+                      <polyline
+                        fill="none"
+                        stroke="#fbbf24"
+                        strokeWidth="2.75"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        points={portfolioLinePoints((portfolioCurve.points ?? []).map((x) => x.value))}
+                      />
+                      {(portfolioCurve.points ?? []).map((p, idx) => {
+                        const values = (portfolioCurve.points ?? []).map((x) => x.value);
+                        const min = Math.min(...values);
+                        const max = Math.max(...values);
+                        const span = max - min || 1;
+                        const x = values.length === 1 ? 160 : (idx / (values.length - 1)) * 320;
+                        const y = 100 - ((p.value - min) / span) * 88 + 8;
+                        const up = (p.growth_pct ?? 0) >= 0;
+                        return <circle key={`${p.date}-${idx}`} cx={x} cy={y} r="3.5" fill={up ? "#34d399" : "#fb7185"} />;
+                      })}
+                    </svg>
+                    <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
+                      <p className="text-zinc-500">{(portfolioCurve.points ?? [])[0]?.date ?? "—"}</p>
+                      <p className="text-zinc-500">
+                        {(portfolioCurve.points ?? [])[Math.floor((portfolioCurve.points?.length ?? 1) / 2)]?.date ?? "—"}
+                      </p>
+                      <p className="text-zinc-500">
+                        {(portfolioCurve.points ?? [])[Math.max(0, (portfolioCurve.points?.length ?? 1) - 1)]?.date ?? "—"}
+                      </p>
                     </div>
-                  ) : null}
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-zinc-500">Start capital</p>
+                        <p className="text-xs font-semibold text-zinc-200">
+                          $
+                          {(portfolioCurve.start_value ?? 0).toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-zinc-500">Growth</p>
+                        <p
+                          className={`text-xs font-semibold ${
+                            (portfolioCurve.start_value ?? 0) > 0 &&
+                            ((portfolioCurve.end_value ?? 0) / (portfolioCurve.start_value ?? 1) - 1) * 100 >= 0
+                              ? "text-emerald-400"
+                              : "text-rose-400"
+                          }`}
+                        >
+                          {(() => {
+                            const s = portfolioCurve.start_value ?? 0;
+                            const e = portfolioCurve.end_value ?? 0;
+                            if (s <= 0) return "—";
+                            const g = (e / s - 1) * 100;
+                            return `${g >= 0 ? "+" : ""}${g.toFixed(2)}%`;
+                          })()}
+                        </p>
+                      </div>
+                      <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+                        <p className="text-[10px] uppercase tracking-wide text-zinc-500">Current capital</p>
+                        <p className="text-xs font-semibold text-zinc-200">
+                          $
+                          {(portfolioCurve.end_value ?? 0).toLocaleString(undefined, {
+                            maximumFractionDigits: 2,
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              );
-            })
+              ) : null}
+            </>
+          ) : (
+            <p className="mt-4 text-sm text-zinc-400">
+              {portfolioPerf?.message ??
+                "Add priced positions under My portfolio to see period returns."}
+            </p>
           )}
         </div>
+
+        <section className="glass rounded-2xl p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Top market movers
+          </h2>
+          <p className="mt-1 text-xs text-zinc-500">
+            Yahoo Finance · Day gainers. Tap a row for candlesticks, business summary, and valuation fields.
+          </p>
+          <div className="mt-3 space-y-2 text-sm">
+            {movers.length === 0 ? (
+              <p className="text-zinc-500">Loading movers...</p>
+            ) : (
+              movers.slice(0, 5).map((x) => {
+                const ch = Number.parseFloat(x.change_percent ?? "0");
+                const up = ch >= 0;
+                const sym = x.symbol ?? "";
+                const open = expandedMover === sym;
+                return (
+                  <div key={sym} className="rounded-lg border border-zinc-800/60 bg-zinc-900/40">
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-zinc-900/70"
+                      onClick={() => setExpandedMover((prev) => (prev === sym ? null : sym))}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <span className="font-semibold text-zinc-100">{sym}</span>
+                        {x.long_name ? (
+                          <p className="truncate text-[10px] text-zinc-500" title={x.long_name}>
+                            {x.long_name}
+                          </p>
+                        ) : null}
+                        <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500">
+                          {x.why_today?.trim() || moverWhyText(x)}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-2 text-right">
+                        {typeof x.price === "number" ? (
+                          <span className="hidden text-xs text-zinc-500 sm:inline">
+                            ${x.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                          </span>
+                        ) : null}
+                        <span
+                          className={`tabular-nums font-semibold ${up ? "text-emerald-400" : "text-rose-400"}`}
+                        >
+                          {up ? "+" : ""}
+                          {x.change_percent ?? "0"}%
+                        </span>
+                        <span className="text-[10px] text-zinc-500">{open ? "▲" : "▼"}</span>
+                      </div>
+                    </button>
+                    {open && sym ? (
+                      <div className="border-t border-zinc-800/80 px-3 pb-4 pt-2">
+                        <StockInfoPanel symbol={sym} showChart chartPeriod="1y" />
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </section>
       </section>
 
-      <section className="glass rounded-2xl p-5">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-          Market-cap weighted leaders
-        </h2>
-        <p className="mt-2 text-sm text-zinc-400">
-          Largest-cap names often drive index direction. Track these stocks first during high-volume sessions.
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {capLeaders.map((q, i) => (
-            <CapLeaderCard
-              key={`cap-${q.symbol}-${i}`}
-              q={q}
-              selected={expandedLeader === q.symbol}
-              onSelect={() =>
-                setExpandedLeader((prev) => (prev === q.symbol ? null : (q.symbol ?? null)))
-              }
-            />
-          ))}
-        </div>
-        {expandedLeader ? (
-          <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
-            <StockInfoPanel symbol={expandedLeader} showChart chartPeriod="1y" />
+      <section className="grid gap-4 xl:grid-cols-2">
+        <section className="glass rounded-2xl p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Market-cap weighted leaders
+          </h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            Largest-cap names often drive index direction. Track these stocks first during high-volume sessions.
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {capLeaders.map((q, i) => (
+              <CapLeaderCard
+                key={`cap-${q.symbol}-${i}`}
+                q={q}
+                selected={expandedLeader === q.symbol}
+                onSelect={() =>
+                  setExpandedLeader((prev) => (prev === q.symbol ? null : (q.symbol ?? null)))
+                }
+              />
+            ))}
           </div>
-        ) : null}
+          {expandedLeader ? (
+            <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+              <StockInfoPanel symbol={expandedLeader} showChart chartPeriod="1y" />
+            </div>
+          ) : null}
+        </section>
+
+        <section id="etfs" className="glass scroll-mt-24 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">ETFs & indices</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {etfQ.map((q, i) => (
+              <QuoteCard key={`etf-${q.symbol}-${i}`} q={q} />
+            ))}
+            {etfQ.length === 0 && !loading && (
+              <p className="col-span-full text-sm text-zinc-500">No ETF quotes yet.</p>
+            )}
+          </div>
+        </section>
       </section>
 
       {loading && (
@@ -1006,18 +1034,6 @@ export function Market() {
         <audio controls src={audioUrl} className="w-full max-w-md" />
       )}
 
-      <section id="etfs" className="scroll-mt-24 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">ETFs & indices</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {etfQ.map((q, i) => (
-            <QuoteCard key={`etf-${q.symbol}-${i}`} q={q} />
-          ))}
-          {etfQ.length === 0 && !loading && (
-            <p className="col-span-full text-sm text-zinc-500">No ETF quotes yet.</p>
-          )}
-        </div>
-      </section>
-
       <section id="crypto" className="scroll-mt-24 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Crypto</h2>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1026,21 +1042,6 @@ export function Market() {
           ))}
           {cryptoQ.length === 0 && !loading && (
             <p className="col-span-full text-sm text-zinc-500">No crypto quotes yet.</p>
-          )}
-        </div>
-      </section>
-
-      <section id="stocks" className="scroll-mt-24 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Equities</h2>
-        <p className="text-xs text-zinc-500">
-          Single-name equities appear here when added to the batch; ETFs above cover broad beta.
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {stockQ.map((q, i) => (
-            <QuoteCard key={`s-${q.symbol}-${i}`} q={q} />
-          ))}
-          {stockQ.length === 0 && !loading && (
-            <p className="col-span-full text-sm text-zinc-500">No additional equity rows.</p>
           )}
         </div>
       </section>
@@ -1066,44 +1067,70 @@ export function Market() {
               </button>
             </div>
             <StockInfoPanel symbol={stockModalSymbol} showChart chartPeriod="1y" />
+            <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
+                  Sector + performance comparison
+                </h3>
+                <span className="text-[11px] text-zinc-500">Compare multiple securities side by side</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <input
+                  className="min-w-[14rem] flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs uppercase text-zinc-100"
+                  value={compareInput}
+                  onChange={(e) => setCompareInput(e.target.value)}
+                  placeholder="e.g. NVDA,AMD,QQQ"
+                />
+                <button
+                  type="button"
+                  onClick={applyComparisonSymbols}
+                  className="rounded-lg border border-zinc-700 px-3 py-2 text-xs font-semibold text-zinc-300 hover:border-zinc-500"
+                >
+                  Compare
+                </button>
+              </div>
+              {compareLoading ? (
+                <p className="mt-3 flex items-center gap-2 text-xs text-zinc-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading comparison…
+                </p>
+              ) : (
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {compareRows.map((r) => {
+                    const trendClass =
+                      r.trend === "up" ? "text-emerald-400" : r.trend === "down" ? "text-rose-400" : "text-zinc-400";
+                    const fmt = (n: number | null | undefined) =>
+                      n == null ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+                    return (
+                      <div key={r.symbol} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                        <p className="text-base font-semibold text-zinc-100">{r.symbol}</p>
+                        <p className="mt-0.5 text-[11px] text-zinc-500">{r.longName ?? "—"}</p>
+                        <p className="mt-1 text-xs text-zinc-400">Sector: {r.sector ?? "Unknown"}</p>
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                          <div className="rounded bg-zinc-900 p-1.5">
+                            <p className="text-[10px] text-zinc-500">1M</p>
+                            <p className="font-semibold text-zinc-200">{fmt(r.perf1m)}</p>
+                          </div>
+                          <div className="rounded bg-zinc-900 p-1.5">
+                            <p className="text-[10px] text-zinc-500">6M</p>
+                            <p className="font-semibold text-zinc-200">{fmt(r.perf6m)}</p>
+                          </div>
+                          <div className="rounded bg-zinc-900 p-1.5">
+                            <p className="text-[10px] text-zinc-500">1Y</p>
+                            <p className="font-semibold text-zinc-200">{fmt(r.perf1y)}</p>
+                          </div>
+                        </div>
+                        <p className={`mt-2 text-xs font-medium ${trendClass}`}>
+                          Trend: {r.trend === "up" ? "Uptrend" : r.trend === "down" ? "Downtrend" : "Sideways"}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       ) : null}
-
-      <div id="chart" className="glass scroll-mt-24 rounded-2xl p-6">
-        <div className="mb-4 flex flex-wrap items-end justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-zinc-400" />
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">
-              Price chart (daily candlesticks)
-            </h2>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs text-zinc-500" htmlFor="chart-symbol">
-              Symbol
-            </label>
-            <input
-              id="chart-symbol"
-              className="w-36 rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm uppercase text-white"
-              value={chartSymbol}
-              onChange={(e) => setChartSymbol(e.target.value.toUpperCase())}
-              placeholder="NVDA"
-              maxLength={12}
-            />
-            <span className="text-xs text-zinc-500">mplfinance chart · 1y · 1d</span>
-            <WhyMattersButton
-              label="Chart?"
-              context={{
-                kind: "chart",
-                label: `${chartSymbol.trim() || "NVDA"} candlesticks`,
-                value: "Each bar is one trading day (open/high/low/close).",
-                user_note: "Trends persist until a narrative or liquidity regime breaks them.",
-              }}
-            />
-          </div>
-        </div>
-        <CandlestickPanel symbol={chartSymbol.trim() || "NVDA"} period="1y" interval="1d" />
-      </div>
 
     </div>
   );

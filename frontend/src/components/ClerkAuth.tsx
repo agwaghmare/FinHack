@@ -1,8 +1,11 @@
 import { ClerkProvider, useAuth, SignIn, SignUp } from "@clerk/clerk-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { apiBase, setClerkTokenGetter } from "../lib/api";
+import { setClerkTokenGetter } from "../lib/api";
 
 export const ClerkEnabledContext = createContext(false);
+
+const apiBase =
+  import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8001";
 
 function TokenBridge() {
   const { getToken, isLoaded } = useAuth();
@@ -77,7 +80,16 @@ export function ClerkAuthRoot({ children }: { children: ReactNode }) {
 
 export function ClerkSignInPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4">
+      <div className="max-w-xl text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400/90">FutureSight</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-100">
+          Build your future with us
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          Start investing early and secure your future with FutureSight.
+        </p>
+      </div>
       <SignIn
         routing="path"
         path="/sign-in"
@@ -91,7 +103,16 @@ export function ClerkSignInPage() {
 
 export function ClerkSignUpPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4">
+      <div className="max-w-xl text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400/90">FutureSight</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-100">
+          Build your future with us
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          Start investing early and secure your future with FutureSight.
+        </p>
+      </div>
       <SignUp
         routing="path"
         path="/sign-up"

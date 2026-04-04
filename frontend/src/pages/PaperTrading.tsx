@@ -50,7 +50,7 @@ function PaperTradingContent({ userId }: { userId: string }) {
         const raw = typeof fb === "string" ? fb : JSON.stringify(fb ?? f, null, 2);
         setFeedback(
           raw.includes(DEMO_AI)
-            ? "AI coaching is in demo mode right now. Once GEMINI_API_KEY or OPENAI_API_KEY is configured (API .env), you will see personalized notes about concentration, position sizing, trade frequency, and practical next steps."
+            ? "AI coaching is in demo mode right now. Once GEMINI_API_KEY is configured, you will see personalized notes about concentration, position sizing, trade frequency, and practical next steps."
             : raw,
         );
       } else {

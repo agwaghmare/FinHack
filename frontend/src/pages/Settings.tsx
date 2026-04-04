@@ -11,6 +11,7 @@ type Health = {
   news_pipeline?: string;
   market_cross_asset?: boolean;
   ai_explain?: boolean;
+  mistral_key_loaded?: boolean;
 };
 
 const NOTIF_KEY = "finsight_notification_prefs_v1";

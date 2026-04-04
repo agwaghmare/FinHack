@@ -456,6 +456,25 @@ def _shorten_business_summary(text: str, max_len: int = 380) -> str:
     return window.rstrip() + "…"
 
 
+def _mover_why_today(symbol: str) -> str:
+    """Short catalyst line from latest ticker news headline."""
+    sym = symbol.upper().strip()
+    if not sym:
+        return "No symbol available for catalyst lookup."
+    try:
+        t = _yf().Ticker(_yahoo_equity_ticker(sym))
+        news = getattr(t, "news", None) or []
+        for item in news[:3]:
+            if not isinstance(item, dict):
+                continue
+            title = str(item.get("title") or "").strip()
+            if title:
+                return title if len(title) <= 180 else (title[:177].rstrip() + "...")
+    except Exception as e:
+        logger.debug("mover why %s: %s", sym, e)
+    return "Likely moving on earnings, guidance, macro tape, or sector flow."
+
+
 def get_stock_fundamentals(symbol: str) -> dict[str, Any]:
     """yfinance `Ticker.info` slice: summary, valuation, logo via Clearbit from company website."""
     sym = symbol.upper().strip()
@@ -548,6 +567,7 @@ def get_yahoo_day_movers(count: int = 8) -> dict[str, Any]:
                 "change_percent": pct_str,
                 "volume": vol_i,
                 "long_name": q.get("longName") or q.get("shortName") or q.get("displayName"),
+                "why_today": _mover_why_today(sym),
                 "source": "yahoo_day_gainers",
             }
         )
