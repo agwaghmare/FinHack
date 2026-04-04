@@ -57,6 +57,23 @@ type PortfolioData = {
   risk_score?: number;
   risk_label?: string;
   positions?: PortfolioPosition[];
+  sharpe_ratio?: number | null;
+  max_drawdown_pct?: number | null;
+  rolling_beta_90d?: number | null;
+};
+
+type StrategyData = {
+  suggestions?: string;
+  regime?: string;
+  confidence_pct?: number;
+  narrative?: string;
+  regime_last_30d?: Record<string, number>;
+  fed_rate?: number;
+  cpi?: number;
+  unemployment?: number;
+  pce?: number;
+  risk_score?: number;
+  risk_label?: string;
 };
 
 function normalizeText(value: unknown): string {
@@ -150,16 +167,11 @@ function PositionRiskRow({ pos }: { pos: PortfolioPosition }) {
 
   return (
     <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
-      {/* Header row */}
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-zinc-200">{pos.symbol}</span>
         <span className={`text-xs font-bold ${textColor}`}>{pos.risk_score}/10</span>
       </div>
-
-      {/* Score breakdown */}
       <div className="grid grid-cols-3 gap-2 text-[10px]">
-
-        {/* Volatility */}
         <div className="space-y-1">
           <div className="flex justify-between text-zinc-500">
             <span>Volatility</span>
@@ -170,8 +182,6 @@ function PositionRiskRow({ pos }: { pos: PortfolioPosition }) {
           </div>
           <span className="text-zinc-500">{(pos.volatility * 100).toFixed(1)}% ann.</span>
         </div>
-
-        {/* Beta */}
         <div className="space-y-1">
           <div className="flex justify-between text-zinc-500">
             <span>Beta</span>
@@ -182,8 +192,6 @@ function PositionRiskRow({ pos }: { pos: PortfolioPosition }) {
           </div>
           <span className="text-zinc-500">β {pos.beta.toFixed(2)}</span>
         </div>
-
-        {/* Concentration */}
         <div className="space-y-1">
           <div className="flex justify-between text-zinc-500">
             <span>Weight</span>
@@ -194,15 +202,90 @@ function PositionRiskRow({ pos }: { pos: PortfolioPosition }) {
           </div>
           <span className="text-zinc-500">{(pos.weight * 100).toFixed(1)}% of port.</span>
         </div>
-
       </div>
     </div>
   );
 }
+
+function FormattedInsight({ text, kind }: { text: string; kind?: string }) {
+  const lines = text.split("\n").filter(Boolean);
+
+  return (
+    <div className="mt-4 space-y-3">
+      {lines.map((line, i) => {
+        const clean = line
+          .replace(/\*\*(.+?)\*\*/g, "$1")
+          .replace(/\*(.+?)\*/g, "$1")
+          .trim();
+
+        const isHeader = /^(TOP THEMES|SENTIMENT BALANCE|MACRO IMPACT|SO WHAT)/i.test(clean);
+        const isBullet = /^[-•]\s/.test(clean);
+        const isNumbered = /^\d+\.\s/.test(clean);
+
+        if (isHeader) {
+          return (
+            <p key={i} className="text-[11px] font-semibold uppercase tracking-widest text-blue-400 mt-4 first:mt-0">
+              {clean}
+            </p>
+          );
+        }
+
+        if (isBullet) {
+          return (
+            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
+              <span className="text-zinc-500 shrink-0 mt-0.5">·</span>
+              <span>{clean.replace(/^[-•]\s/, "")}</span>
+            </div>
+          );
+        }
+
+        if (isNumbered && kind === "strategy") {
+          const num = clean.match(/^(\d+)\./)?.[1];
+          const rest = clean.replace(/^\d+\.\s*/, "");
+          const colonIdx = rest.indexOf(":");
+          const title = colonIdx > -1 ? rest.slice(0, colonIdx) : rest;
+          const body = colonIdx > -1 ? rest.slice(colonIdx + 1).trim() : "";
+
+          return (
+            <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full w-5 h-5 flex items-center justify-center shrink-0">
+                  {num}
+                </span>
+                <span className="text-sm font-semibold text-zinc-100">{title}</span>
+              </div>
+              {body && (
+                <p className="text-xs leading-relaxed text-zinc-400 pl-7">{body}</p>
+              )}
+            </div>
+          );
+        }
+
+        if (isNumbered) {
+          const num = clean.match(/^(\d+)\./)?.[1];
+          const rest = clean.replace(/^\d+\.\s/, "");
+          return (
+            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
+              <span className="text-blue-400 font-semibold shrink-0">{num}.</span>
+              <span>{rest}</span>
+            </div>
+          );
+        }
+
+        return (
+          <p key={i} className="text-sm leading-relaxed text-zinc-400">
+            {clean}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
 function InsightsContent({ userId }: { userId: string }) {
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [news, setNews] = useState<unknown>(null);
-  const [strategy, setStrategy] = useState<unknown>(null);
+  const [strategy, setStrategy] = useState<StrategyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -320,7 +403,7 @@ function InsightsContent({ userId }: { userId: string }) {
         if (!cancelled) {
           setPortfolio(p as PortfolioData);
           setNews(n);
-          setStrategy(s);
+          setStrategy(s as StrategyData);
         }
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : "Failed to load");
@@ -337,11 +420,7 @@ function InsightsContent({ userId }: { userId: string }) {
       typeof news === "object" && news && "summary" in news
         ? normalizeText((news as { summary?: unknown }).summary)
         : normalizeText(news);
-    const strategyText =
-      typeof strategy === "object" && strategy && "suggestions" in strategy
-        ? normalizeText((strategy as { suggestions?: unknown }).suggestions)
-        : normalizeText(strategy);
-
+    const strategyText = normalizeText(strategy?.suggestions);
     const geminiOff = integrations?.gemini === false;
 
     return [
@@ -410,7 +489,6 @@ function InsightsContent({ userId }: { userId: string }) {
             </div>
           )}
         </div>
-
         {holdingsNewsLoading && (
           <div className="flex items-center gap-2 text-sm text-zinc-500">
             <Loader2 className="h-4 w-4 animate-spin" /> Fetching headlines for your holdings…
@@ -648,158 +726,135 @@ function InsightsContent({ userId }: { userId: string }) {
       {/* ── Insight Panels ── */}
       <div className="grid gap-6 lg:grid-cols-3">
         {sections.map(({ key, title, text, placeholder }) => (
-  <div key={key} className="glass rounded-2xl p-6">
-    <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
+          <div key={key} className="glass rounded-2xl p-6">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
 
-    {/* Portfolio risk score UI */}
-    {key === "portfolio" && portfolio?.risk_score != null && (
-      <div className="mt-4 space-y-3">
-        <RiskBar score={portfolio.risk_score} label={portfolio.risk_label ?? "Unknown"} />
-        <div className="mt-3 space-y-1.5">
-          {(portfolio.positions ?? []).map((pos) => (
-            <PositionRiskRow key={pos.symbol} pos={pos} />
-          ))}
-        </div>
-      </div>
-    )}
+            {/* Portfolio risk score UI */}
+            {key === "portfolio" && portfolio?.risk_score != null && (
+              <div className="mt-4 space-y-3">
+                <RiskBar score={portfolio.risk_score} label={portfolio.risk_label ?? "Unknown"} />
+                <div className="mt-3 space-y-1.5">
+                  {(portfolio.positions ?? []).map((pos) => (
+                    <PositionRiskRow key={pos.symbol} pos={pos} />
+                  ))}
+                </div>
+                {/* Portfolio-level metrics */}
+                {(portfolio.sharpe_ratio != null || portfolio.max_drawdown_pct != null || portfolio.rolling_beta_90d != null) && (
+                  <div className="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-3 gap-3">
+                    <div className="space-y-1 text-center">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Sharpe Ratio</p>
+                      <p className={`text-lg font-bold ${
+                        portfolio.sharpe_ratio == null ? "text-zinc-500" :
+                        portfolio.sharpe_ratio >= 1 ? "text-emerald-400" :
+                        portfolio.sharpe_ratio >= 0 ? "text-yellow-400" : "text-rose-400"
+                      }`}>
+                        {portfolio.sharpe_ratio != null ? portfolio.sharpe_ratio.toFixed(2) : "—"}
+                      </p>
+                      <p className="text-[10px] text-zinc-600">
+                        {portfolio.sharpe_ratio == null ? "" :
+                         portfolio.sharpe_ratio >= 1 ? "Good" :
+                         portfolio.sharpe_ratio >= 0 ? "Moderate" : "Poor"}
+                      </p>
+                    </div>
+                    <div className="space-y-1 text-center">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Max Drawdown</p>
+                      <p className={`text-lg font-bold ${
+                        portfolio.max_drawdown_pct == null ? "text-zinc-500" :
+                        portfolio.max_drawdown_pct > -10 ? "text-emerald-400" :
+                        portfolio.max_drawdown_pct > -20 ? "text-yellow-400" : "text-rose-400"
+                      }`}>
+                        {portfolio.max_drawdown_pct != null ? `${portfolio.max_drawdown_pct.toFixed(1)}%` : "—"}
+                      </p>
+                      <p className="text-[10px] text-zinc-600">1-year low</p>
+                    </div>
+                    <div className="space-y-1 text-center">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Rolling Beta</p>
+                      <p className={`text-lg font-bold ${
+                        portfolio.rolling_beta_90d == null ? "text-zinc-500" :
+                        Math.abs(portfolio.rolling_beta_90d) < 0.8 ? "text-emerald-400" :
+                        Math.abs(portfolio.rolling_beta_90d) < 1.2 ? "text-yellow-400" : "text-rose-400"
+                      }`}>
+                        {portfolio.rolling_beta_90d != null ? portfolio.rolling_beta_90d.toFixed(2) : "—"}
+                      </p>
+                      <p className="text-[10px] text-zinc-600">90-day vs SPY</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
-    {key === "portfolio" && portfolio?.risk_score == null && (
-      <p className="mt-4 text-sm text-zinc-500">Add positions to see your risk score.</p>
-    )}
+            {key === "portfolio" && portfolio?.risk_score == null && (
+              <p className="mt-4 text-sm text-zinc-500">Add positions to see your risk score.</p>
+            )}
 
-    {key !== "portfolio" && placeholder && (
-      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-200">
-        <Sparkles className="h-3.5 w-3.5" />
-        {integrations?.gemini === false ? "Setup: add API key" : "Demo mode"}
-      </div>
-    )}
+            {/* Strategy regime context */}
+            {key === "strategy" && strategy?.regime && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wide">Market Regime</span>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                    strategy.regime === "Bull"
+                      ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/30"
+                      : strategy.regime === "Bear"
+                        ? "bg-rose-400/10 text-rose-400 border border-rose-400/30"
+                        : "bg-yellow-400/10 text-yellow-400 border border-yellow-400/30"
+                  }`}>
+                    {strategy.regime} · {strategy.confidence_pct}% confidence
+                  </span>
+                </div>
+                {strategy.narrative && (
+                  <p className="text-xs text-zinc-400 leading-relaxed">{strategy.narrative}</p>
+                )}
+                {strategy.regime_last_30d && Object.keys(strategy.regime_last_30d).length > 0 && (
+                  <div className="flex gap-3 text-[10px]">
+                    {Object.entries(strategy.regime_last_30d).map(([label, days]) => (
+                      <div key={label} className="flex items-center gap-1">
+                        <span className={`font-semibold ${
+                          label === "Bull" ? "text-emerald-400" :
+                          label === "Bear" ? "text-rose-400" : "text-yellow-400"
+                        }`}>{label}</span>
+                        <span className="text-zinc-500">{days}d</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2 text-[10px]">
+                  {strategy.fed_rate != null && (
+                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
+                      Fed {strategy.fed_rate}%
+                    </span>
+                  )}
+                  {strategy.cpi != null && (
+                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
+                      CPI {strategy.cpi}
+                    </span>
+                  )}
+                  {strategy.unemployment != null && (
+                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
+                      Unemployment {strategy.unemployment}%
+                    </span>
+                  )}
+                  {strategy.pce != null && (
+                    <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
+                      PCE {strategy.pce.toLocaleString()}
+                    </span>
+                  )}
+                </div>
+                <div className="h-px bg-zinc-800" />
+              </div>
+            )}
 
-    {key === "strategy" && typeof strategy === "object" && strategy && "regime" in strategy && (
-  <div className="mt-4 space-y-3">
-    {/* Regime badge */}
-    <div className="flex items-center justify-between">
-      <span className="text-[10px] text-zinc-500 uppercase tracking-wide">Market Regime</span>
-      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-        (strategy as { regime?: string }).regime === "Bull"
-          ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/30"
-          : (strategy as { regime?: string }).regime === "Bear"
-            ? "bg-rose-400/10 text-rose-400 border border-rose-400/30"
-            : "bg-yellow-400/10 text-yellow-400 border border-yellow-400/30"
-      }`}>
-        {(strategy as { regime?: string }).regime} · {(strategy as { confidence_pct?: number }).confidence_pct}% confidence
-      </span>
-    </div>
+            {key !== "portfolio" && placeholder && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-200">
+                <Sparkles className="h-3.5 w-3.5" />
+                {integrations?.gemini === false ? "Setup: add API key" : "Demo mode"}
+              </div>
+            )}
 
-    {/* Narrative */}
-    {(strategy as { narrative?: string }).narrative && (
-      <p className="text-xs text-zinc-400 leading-relaxed">
-        {(strategy as { narrative?: string }).narrative}
-      </p>
-    )}
-
-    {/* Regime last 30d */}
-    {(strategy as { regime_last_30d?: Record<string, number> }).regime_last_30d && (
-      <div className="flex gap-3 text-[10px]">
-        {Object.entries((strategy as { regime_last_30d?: Record<string, number> }).regime_last_30d ?? {}).map(([label, days]) => (
-          <div key={label} className="flex items-center gap-1">
-            <span className={`font-semibold ${
-              label === "Bull" ? "text-emerald-400" :
-              label === "Bear" ? "text-rose-400" : "text-yellow-400"
-            }`}>{label}</span>
-            <span className="text-zinc-500">{days}d</span>
+            {text ? <FormattedInsight text={text} kind={key} /> : null}
           </div>
         ))}
       </div>
-    )}
-
-    {/* Macro pills */}
-    <div className="flex flex-wrap gap-2 text-[10px]">
-      {(strategy as { fed_rate?: number }).fed_rate != null && (
-        <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
-          Fed {(strategy as { fed_rate?: number }).fed_rate}%
-        </span>
-      )}
-      {(strategy as { cpi?: number }).cpi != null && (
-        <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
-          CPI {(strategy as { cpi?: number }).cpi}
-        </span>
-      )}
-      {(strategy as { unemployment?: number }).unemployment != null && (
-        <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
-          Unemployment {(strategy as { unemployment?: number }).unemployment}%
-        </span>
-      )}
-    </div>
-
-    <div className="h-px bg-zinc-800" />
-  </div>
-)}
-
-    {text ? <FormattedInsight text={text} /> : null}
-  </div>
-))}
-      </div>
-    </div>
-  );
-}
-
-function FormattedInsight({ text }: { text: string }) {
-  // Split into lines and clean markdown
-  const lines = text.split("\n").filter(Boolean);
-
-  return (
-    <div className="mt-4 space-y-3">
-      {lines.map((line, i) => {
-        // Clean all asterisks for bold/italic markdown
-        const clean = line
-          .replace(/\*\*(.+?)\*\*/g, "$1")
-          .replace(/\*(.+?)\*/g, "$1")
-          .trim();
-
-        // Section headers like "TOP THEMES", "SENTIMENT BALANCE" etc
-        const isHeader = /^(TOP THEMES|SENTIMENT BALANCE|MACRO IMPACT|SO WHAT|\d+\.\s+[A-Z])/i.test(clean);
-
-        // Bullet points
-        const isBullet = /^[-•]\s/.test(clean);
-        const bulletText = isBullet ? clean.replace(/^[-•]\s/, "") : clean;
-
-        // Numbered items like "1. something"
-        const isNumbered = /^\d+\.\s/.test(clean);
-
-        if (isHeader) {
-          return (
-            <p key={i} className="text-[11px] font-semibold uppercase tracking-widest text-blue-400 mt-4 first:mt-0">
-              {clean.replace(/^\d+\.\s/, "")}
-            </p>
-          );
-        }
-
-        if (isBullet) {
-          return (
-            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
-              <span className="text-blue-400 shrink-0 mt-0.5">·</span>
-              <span>{bulletText}</span>
-            </div>
-          );
-        }
-
-        if (isNumbered) {
-          const num = clean.match(/^(\d+)\./)?.[1];
-          const rest = clean.replace(/^\d+\.\s/, "");
-          return (
-            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
-              <span className="text-blue-400 font-semibold shrink-0">{num}.</span>
-              <span>{rest}</span>
-            </div>
-          );
-        }
-
-        return (
-          <p key={i} className="text-sm leading-relaxed text-zinc-400">
-            {clean}
-          </p>
-        );
-      })}
     </div>
   );
 }
