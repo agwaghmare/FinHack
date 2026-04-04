@@ -37,6 +37,41 @@ def _client():
     return Client(api_key=key)
 
 
+def _looks_like_gemini_quota_error(err: Exception) -> bool:
+    s = f"{type(err).__name__}: {err!s}".upper()
+    return "429" in s or "RESOURCE_EXHAUSTED" in s or "QUOTA" in s
+
+
+def _ai_failure_message(*, last_gemini_err: Exception | None, openai_key_configured: bool) -> str:
+    """Clear copy for Insights / trade feedback when all providers fail."""
+    lines: list[str] = []
+
+    if last_gemini_err and _looks_like_gemini_quota_error(last_gemini_err):
+        lines.append(
+            "Gemini returned 429 (RESOURCE_EXHAUSTED): you have hit Google’s quota or rate limit for this API key. "
+            "The key is usually fine — billing or daily free-tier limits are not. "
+            "Open Google AI Studio / Cloud billing for the project that owns the key, or wait for the quota window to reset. "
+            "Docs: https://ai.google.dev/gemini-api/docs/rate-limits"
+        )
+    elif last_gemini_err:
+        lines.append(
+            f"Gemini error after trying all configured models: {type(last_gemini_err).__name__}: {last_gemini_err!s}"[
+                :450
+            ]
+        )
+
+    if not openai_key_configured:
+        lines.append(
+            "OpenAI was not used: set OPENAI_API_KEY in the API .env (repo root, next to app.py) so the app can fall back when Gemini is unavailable."
+        )
+    else:
+        lines.append(
+            "OpenAI fallback was attempted but failed — verify OPENAI_API_KEY, account billing, and rate limits at https://platform.openai.com/account/billing"
+        )
+
+    return "\n\n".join(lines)
+
+
 def _openai_complete(prompt: str) -> str | None:
     key = openai_key()
     if not key:
@@ -90,10 +125,9 @@ def _run(prompt: str) -> str:
                 return fb
             if last_err:
                 logger.exception("Gemini generate failed after model fallbacks")
-                return (
-                    "AI request failed for all Gemini models; OpenAI fallback also failed. "
-                    "Confirm GEMINI_API_KEY / GOOGLE_API_KEY and optionally OPENAI_API_KEY. Raw error: "
-                    f"{type(last_err).__name__}: {last_err!s}"[:400]
+                return _ai_failure_message(
+                    last_gemini_err=last_err,
+                    openai_key_configured=bool(openai_key()),
                 )
             return "AI returned an empty response. Try again or check API quotas."
         except Exception as e:
@@ -101,6 +135,11 @@ def _run(prompt: str) -> str:
             fb = _openai_complete(prompt)
             if fb:
                 return fb
+            if _looks_like_gemini_quota_error(e):
+                return _ai_failure_message(
+                    last_gemini_err=e,
+                    openai_key_configured=bool(openai_key()),
+                )
             return (
                 "AI temporarily unavailable. Check GEMINI_API_KEY / GOOGLE_API_KEY / OPENAI_API_KEY. "
                 f"({type(e).__name__}: {e!s})"[:500]
