@@ -538,20 +538,6 @@ function LearnContent({ userId }: { userId: string }) {
         </p>
       </header>
 
-      <section
-        id="mission"
-        className="scroll-mt-24 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 px-5 py-4 dark:border-emerald-500/20 dark:bg-emerald-950/20"
-      >
-        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-          Hackathon alignment
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-          FinSight uses AI for <strong>trustworthy education</strong> (explainers, tutor, “why this matters”) and for{" "}
-          <strong>research & portfolio support</strong> (headline summaries, strategy framing, holdings coach) — with
-          clear limits: no personalized trade instructions; human oversight and professional advice still matter.
-        </p>
-      </section>
-
       <section className="glass rounded-2xl p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Videos to watch</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">

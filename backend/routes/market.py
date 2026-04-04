@@ -1,5 +1,9 @@
+import logging
+
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
+
+logger = logging.getLogger(__name__)
 
 from backend.services.ai_service import generate_insight
 from backend.services.macro_service import get_macro_data
@@ -116,7 +120,20 @@ def market_history(
 
 @router.get("/macro")
 def market_macro():
-    return get_macro_data()
+    """FRED series; on failure returns nulls so clients can still load Yahoo price grids."""
+    try:
+        return get_macro_data()
+    except Exception as e:
+        logger.warning("FRED macro unavailable: %s", e)
+        return {
+            "cpi": None,
+            "rates": None,
+            "gdp": None,
+            "unemployment": None,
+            "pce": None,
+            "error": "fred_unavailable",
+            "detail": str(e)[:240],
+        }
 
 
 @router.get("/news")

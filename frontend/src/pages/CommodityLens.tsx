@@ -30,21 +30,29 @@ export function CommodityLens() {
     let cancelled = false;
     (async () => {
       try {
+        // Macro (FRED) and prices (yfinance) are independent — a FRED key/network failure
+        // must not wipe the commodity & FX grid.
         const [m, px, cross] = await Promise.all([
-          api.marketMacro(),
-          api.marketPrices("WTI,GLD,SLV,DBA,USO,SPY,EURUSD,USDJPY,GBPUSD"),
+          api.marketMacro().catch(() => null),
+          api.marketPrices("WTI,GLD,SLV,DBA,USO,SPY,EURUSD,USDJPY,GBPUSD").catch(() => ({
+            quotes: [] as Quote[],
+          })),
           api.marketCrossAsset().catch(() => null),
         ]);
         if (cancelled) return;
-        const mm = m as { cpi?: number; rates?: number; gdp?: number };
-        setMacro({ cpi: mm.cpi, rates: mm.rates, gdp: mm.gdp });
+        if (m && typeof m === "object") {
+          const mm = m as { cpi?: number; rates?: number; gdp?: number };
+          setMacro({ cpi: mm.cpi, rates: mm.rates, gdp: mm.gdp });
+        } else {
+          setMacro(null);
+        }
         setQuotes((px as { quotes?: Quote[] }).quotes ?? []);
         const h = (cross as { headline?: string } | null)?.headline;
         setChainHeadline(typeof h === "string" ? h : null);
         setCrossAsset((cross as CrossAssetPayload | null) ?? null);
       } catch {
         if (!cancelled) {
-          setMacro({ cpi: 320.5, rates: 4.33, gdp: 29000 });
+          setMacro(null);
           setQuotes([]);
           setCrossAsset(null);
         }
@@ -205,7 +213,11 @@ export function CommodityLens() {
           })}
         </div>
         {quotes.length === 0 && !loading && (
-          <p className="text-sm text-zinc-500">No quotes returned — check API key and symbols.</p>
+          <p className="text-sm text-zinc-500">
+            No live quotes loaded. Prices use <strong className="font-medium text-zinc-600 dark:text-zinc-400">Yahoo Finance</strong> via your API server (yfinance). If this stays empty, check the backend can reach the internet and see server logs; macro numbers above use FRED separately (
+            <code className="rounded bg-zinc-800/80 px-1 text-xs">FRED_API_KEY</code>
+            ).
+          </p>
         )}
       </section>
     </div>
