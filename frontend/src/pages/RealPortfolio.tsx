@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Trash2, Wallet } from "lucide-react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
+import { Loader2, RefreshCw, Sparkles, Trash2, Wallet } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
+import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 
 type PositionRow = {
@@ -35,9 +36,18 @@ export function RealPortfolio() {
   const [err, setErr] = useState<string | null>(null);
   const [symbol, setSymbol] = useState("");
   const [shares, setShares] = useState("");
-  const [avgCost, setAvgCost] = useState("");
-  const [openedAt, setOpenedAt] = useState("");
+  /** Live quote used as cost basis (user does not type cost). */
+  const [livePrice, setLivePrice] = useState<number | null>(null);
+  const [quoteName, setQuoteName] = useState<string | null>(null);
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteErr, setQuoteErr] = useState<string | null>(null);
+  /** Normalized symbol the live price row refers to (avoids showing stale quote after ticker edits). */
+  const [quotedForSymbol, setQuotedForSymbol] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const quoteReq = useRef(0);
+  const [coachText, setCoachText] = useState<string | null>(null);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const [coachErr, setCoachErr] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!userId) return;
@@ -61,30 +71,139 @@ export function RealPortfolio() {
     refresh();
   }, [isLoaded, userId, refresh]);
 
-  async function addHolding(e: React.FormEvent) {
+  useEffect(() => {
+    const sym = symbol.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
+    if (!sym) {
+      setLivePrice(null);
+      setQuoteName(null);
+      setQuoteErr(null);
+      setQuotedForSymbol(null);
+      setQuoteLoading(false);
+      return;
+    }
+    const my = ++quoteReq.current;
+    const t = window.setTimeout(async () => {
+      setQuoteLoading(true);
+      setQuoteErr(null);
+      try {
+        const q = (await api.marketPrice(sym)) as {
+          price?: number;
+          long_name?: string;
+          error?: string;
+        };
+        if (quoteReq.current !== my) return;
+        const p = q.price;
+        if (typeof p === "number" && Number.isFinite(p) && p > 0) {
+          setLivePrice(p);
+          setQuoteName(q.long_name?.trim() || null);
+          setQuotedForSymbol(sym);
+          setQuoteErr(null);
+        } else {
+          setLivePrice(null);
+          setQuoteName(null);
+          setQuotedForSymbol(null);
+          setQuoteErr(q.error?.trim() || "No price returned for this symbol.");
+        }
+      } catch {
+        if (quoteReq.current !== my) return;
+        setLivePrice(null);
+        setQuoteName(null);
+        setQuotedForSymbol(null);
+        setQuoteErr("Could not fetch quote. Check the ticker or try again.");
+      } finally {
+        if (quoteReq.current === my) setQuoteLoading(false);
+      }
+    }, 450);
+    return () => {
+      window.clearTimeout(t);
+    };
+  }, [symbol]);
+
+  async function addHolding(e: FormEvent) {
     e.preventDefault();
     if (!userId) return;
+    const sym = symbol.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
     const sh = parseFloat(shares);
-    const ac = parseFloat(avgCost);
-    if (!symbol.trim() || Number.isNaN(sh) || sh <= 0 || Number.isNaN(ac) || ac <= 0) return;
+    if (!sym || Number.isNaN(sh) || sh <= 0) return;
+
     setSaving(true);
     setErr(null);
     try {
+      let px = livePrice;
+      try {
+        const q = (await api.marketPrice(sym)) as { price?: number };
+        const p = q.price;
+        if (typeof p === "number" && Number.isFinite(p) && p > 0) px = p;
+      } catch {
+        /* use last livePrice */
+      }
+      if (px == null || px <= 0) {
+        setErr("Need a valid live price before adding. Check the symbol and try again.");
+        setSaving(false);
+        return;
+      }
+
       await api.holdingsAdd(userId, {
-        symbol: symbol.trim().toUpperCase(),
+        symbol: sym,
         shares: sh,
-        avg_cost: ac,
-        opened_at: openedAt.trim() || undefined,
+        avg_cost: px,
       });
       setSymbol("");
       setShares("");
-      setAvgCost("");
-      setOpenedAt("");
+      setLivePrice(null);
+      setQuoteName(null);
+      setQuotedForSymbol(null);
+      setQuoteErr(null);
       await refresh();
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Add failed");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function refreshQuoteOnly() {
+    const sym = symbol.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
+    if (!sym) return;
+    setQuoteLoading(true);
+    setQuoteErr(null);
+    try {
+      const q = (await api.marketPrice(sym)) as {
+        price?: number;
+        long_name?: string;
+        error?: string;
+      };
+      const p = q.price;
+      if (typeof p === "number" && Number.isFinite(p) && p > 0) {
+        setLivePrice(p);
+        setQuoteName(q.long_name?.trim() || null);
+        setQuotedForSymbol(sym);
+      } else {
+        setLivePrice(null);
+        setQuotedForSymbol(null);
+        setQuoteErr(q.error?.trim() || "No price returned.");
+      }
+    } catch {
+      setLivePrice(null);
+      setQuotedForSymbol(null);
+      setQuoteErr("Could not fetch quote.");
+    } finally {
+      setQuoteLoading(false);
+    }
+  }
+
+  async function runHoldingsCoach() {
+    if (!userId) return;
+    setCoachBusy(true);
+    setCoachErr(null);
+    try {
+      const r = (await api.aiHoldingsCoach(userId)) as { coaching?: string };
+      setCoachText((r.coaching ?? "").trim() || null);
+    } catch (e) {
+      setCoachErr(e instanceof Error ? e.message : "Coach request failed");
+      setCoachText(null);
+    } finally {
+      setCoachBusy(false);
     }
   }
 
@@ -111,6 +230,9 @@ export function RealPortfolio() {
     );
   }
 
+  const symNorm = symbol.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
+  const priceMatchesTicker = symNorm.length > 0 && quotedForSymbol === symNorm;
+
   const t = snap?.totals;
 
   return (
@@ -128,8 +250,13 @@ export function RealPortfolio() {
               My portfolio
             </h1>
             <p className="mt-2 max-w-xl text-sm text-zinc-500">
-              Add positions (shares & average cost). We value them with live quotes and show
-              unrealized P&amp;L, total return, and CAGR anchored to your earliest purchase date.
+              <strong className="font-medium text-zinc-700 dark:text-zinc-300">Investment research &amp; portfolio support:</strong>{" "}
+              add tickers with share count — we price adds from live quotes. Use the AI holdings coach below for
+              diversification and research prompts (education, not trade orders). Pair with{" "}
+              <Link className="text-emerald-600 underline underline-offset-2 dark:text-emerald-400" to="/learn">
+                Learn Hub
+              </Link>{" "}
+              for financial literacy.
             </p>
           </div>
         </div>
@@ -177,6 +304,38 @@ export function RealPortfolio() {
         </p>
       )}
 
+      <section className="glass rounded-2xl border border-violet-500/20 p-5 dark:border-violet-500/15">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-violet-500 dark:text-violet-400" />
+              <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">AI holdings coach</h2>
+            </div>
+            <p className="mt-2 max-w-2xl text-xs text-zinc-500">
+              Runs on your current snapshot via Gemini/OpenAI (same keys as Insights). Plain-language concentration &
+              research ideas — not buy/sell advice. Configure keys in API <code className="rounded bg-zinc-200/80 px-1 dark:bg-zinc-800">.env</code>.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={runHoldingsCoach}
+            disabled={coachBusy || !userId}
+            className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-violet-500"
+          >
+            {coachBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+            Run coach
+          </button>
+        </div>
+        {coachErr && (
+          <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{coachErr}</p>
+        )}
+        {coachText && (
+          <div className="mt-4 rounded-xl border border-zinc-200 bg-zinc-50/90 p-4 text-sm leading-relaxed text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200">
+            <p className="whitespace-pre-wrap">{coachText}</p>
+          </div>
+        )}
+      </section>
+
       <div className="grid gap-6 lg:grid-cols-5">
         <form
           onSubmit={addHolding}
@@ -184,7 +343,8 @@ export function RealPortfolio() {
         >
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Add holding</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Merging the same symbol averages cost and keeps the earlier purchase date for CAGR.
+            Same symbol again averages cost across lots and keeps the earlier date for CAGR. Cost for
+            each add is the live quote at save time.
           </p>
           <div className="mt-4 space-y-3">
             <div>
@@ -197,45 +357,69 @@ export function RealPortfolio() {
                 maxLength={12}
               />
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="text-[11px] font-medium uppercase text-zinc-500">Shares</label>
-                <input
-                  className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
-                  value={shares}
-                  onChange={(e) => setShares(e.target.value)}
-                  placeholder="10"
-                  inputMode="decimal"
-                />
-              </div>
-              <div>
-                <label className="text-[11px] font-medium uppercase text-zinc-500">
-                  Avg cost ($)
-                </label>
-                <input
-                  className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
-                  value={avgCost}
-                  onChange={(e) => setAvgCost(e.target.value)}
-                  placeholder="180.50"
-                  inputMode="decimal"
-                />
-              </div>
-            </div>
             <div>
-              <label className="text-[11px] font-medium uppercase text-zinc-500">
-                First buy date (optional)
-              </label>
+              <label className="text-[11px] font-medium uppercase text-zinc-500">Shares</label>
               <input
-                type="date"
                 className="mt-1 w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-white"
-                value={openedAt}
-                onChange={(e) => setOpenedAt(e.target.value)}
+                value={shares}
+                onChange={(e) => setShares(e.target.value)}
+                placeholder="10"
+                inputMode="decimal"
               />
+            </div>
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-[11px] font-medium uppercase text-zinc-500">Live price → cost basis</p>
+                <button
+                  type="button"
+                  onClick={refreshQuoteOnly}
+                  disabled={quoteLoading || !symbol.trim()}
+                  className="inline-flex items-center gap-1 rounded-lg border border-zinc-300 px-2 py-1 text-[10px] font-semibold text-zinc-600 hover:bg-zinc-100 disabled:opacity-40 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+                  title="Refresh quote"
+                >
+                  {quoteLoading ? (
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3 w-3" />
+                  )}
+                  Refresh
+                </button>
+              </div>
+              {quoteLoading && !priceMatchesTicker ? (
+                <p className="mt-2 flex items-center gap-2 text-sm text-zinc-500">
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" /> Fetching quote…
+                </p>
+              ) : priceMatchesTicker && livePrice != null && livePrice > 0 ? (
+                <div className="mt-2">
+                  <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-white">
+                    ${livePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
+                  </p>
+                  {quoteName ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{quoteName}</p>
+                  ) : null}
+                  <p className="mt-2 text-[11px] text-zinc-500">
+                    Purchase date for this add defaults to today (server). Indicative quote — may be delayed.
+                  </p>
+                </div>
+              ) : symbol.trim() ? (
+                <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">
+                  {quoteErr ?? "Enter a valid ticker to load a price."}
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-zinc-500">Type a symbol to load Yahoo Finance price.</p>
+              )}
             </div>
           </div>
           <button
             type="submit"
-            disabled={saving}
+            disabled={
+              saving ||
+              !priceMatchesTicker ||
+              livePrice == null ||
+              livePrice <= 0 ||
+              !symbol.trim() ||
+              !shares.trim()
+            }
             className="mt-4 w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-zinc-900"
           >
             {saving ? "Saving…" : "Add to portfolio"}

@@ -1,23 +1,13 @@
-from google.genai import Client
-
-from backend.utils.env_keys import gemini_key
+from backend.services.ai_extended_service import _run
 
 
 def generate_insight(data: dict):
-    key = gemini_key() or "YOUR_KEY"
-    client = Client(api_key=key)
-
     prompt = f"""
     Analyze this financial data and explain risk:
 
     {data}
     """
-
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-    )
-    text = (response.text or "") if response else ""
+    text = _run(prompt)
     return {"insight": text}
 
 
@@ -119,14 +109,7 @@ def explain_why_matters(body: dict | None) -> dict:
     if not isinstance(ctx, dict):
         ctx = {}
 
-    key = gemini_key()
-    if not key or key == "YOUR_KEY":
-        d = _demo_explain(ctx)
-        return {"mode": "demo", **d}
-
-    try:
-        client = Client(api_key=key)
-        prompt = f"""You help retail investors understand markets. No buy/sell instructions.
+    prompt = f"""You help retail investors understand markets. No buy/sell instructions.
 Use exactly these headings in plain English (2–4 sentences each):
 
 WHAT IT IS:
@@ -135,15 +118,9 @@ WHAT IT MEANS FOR YOU (risk lens, not advice):
 
 Context JSON: {ctx}
 """
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        text = ((response.text or "") if response else "").strip()
-        if text:
-            return {"mode": "live", "explanation": text}
-    except Exception:
-        pass
+    text = _run(prompt).strip()
+    if text:
+        return {"mode": "live", "explanation": text}
 
     d = _demo_explain(ctx)
     return {"mode": "demo_fallback", **d}

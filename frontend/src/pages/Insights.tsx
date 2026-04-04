@@ -125,6 +125,7 @@ function InsightsContent({ userId }: { userId: string }) {
   const [newsLoading, setNewsLoading] = useState(false);
   const [newsErr, setNewsErr] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<{ gemini?: boolean } | null>(null);
+  const [heldSymbols, setHeldSymbols] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,13 +158,33 @@ function InsightsContent({ userId }: { userId: string }) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
+    api
+      .holdingsSnapshot(userId)
+      .then((s) => {
+        if (cancelled) return;
+        const rows = ((s as { positions?: { symbol?: string }[] }).positions ?? [])
+          .map((p) => String(p.symbol ?? "").toUpperCase().trim())
+          .filter(Boolean);
+        setHeldSymbols(rows.slice(0, 8));
+      })
+      .catch(() => {
+        if (!cancelled) setHeldSymbols([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  useEffect(() => {
     let ax = false;
-    const sym = newsTicker.trim().toUpperCase() || "SPY";
+    const manual = newsTicker.trim().toUpperCase();
+    const sym = manual || (heldSymbols.length > 0 ? heldSymbols.slice(0, 4).join(",") : "SPY");
     (async () => {
       setNewsLoading(true);
       setNewsErr(null);
       try {
-        const r = await api.marketNews(sym, 25);
+        const r = await api.marketNews(sym, 12);
         if (!ax) setNewsFeed(r as typeof newsFeed);
       } catch (e) {
         if (!ax) {
@@ -177,7 +198,7 @@ function InsightsContent({ userId }: { userId: string }) {
     return () => {
       ax = true;
     };
-  }, [newsTicker]);
+  }, [newsTicker, heldSymbols]);
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +208,7 @@ function InsightsContent({ userId }: { userId: string }) {
       try {
         const [p, n, s] = await Promise.all([
           api.aiPortfolioAnalysis(userId),
-          api.aiNewsSummary(),
+          api.aiNewsSummary(userId),
           api.aiStrategy(userId),
         ]);
         if (!cancelled) {
@@ -343,10 +364,13 @@ function InsightsContent({ userId }: { userId: string }) {
             Insights
           </p>
           <h1 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">
-            Summaries, news & strategy
+            AI research support &amp; strategy framing
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Live headlines from GNews and Yahoo (yfinance), plus Gemini-powered panels when configured.
+            Headlines from GNews and Yahoo, plus LLM panels (Gemini/OpenAI) for portfolio, news, and paper-lab strategy —
+            aligned with <strong className="font-medium text-zinc-600 dark:text-zinc-400">investment research</strong>{" "}
+            support; combine with <strong className="font-medium text-zinc-600 dark:text-zinc-400">Learn Hub</strong> for
+            education. Not personalized advice.
           </p>
         </div>
         <button
@@ -384,7 +408,7 @@ function InsightsContent({ userId }: { userId: string }) {
               className="w-32 rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm uppercase text-white dark:bg-zinc-900/80"
               value={newsTicker}
               onChange={(e) => setNewsTicker(e.target.value.toUpperCase())}
-              placeholder="SPY"
+              placeholder={heldSymbols.length > 0 ? heldSymbols.slice(0, 3).join(",") : "SPY"}
               maxLength={24}
             />
           </div>
@@ -392,7 +416,7 @@ function InsightsContent({ userId }: { userId: string }) {
         <p className="mt-2 text-xs text-zinc-500">
           Uses <code className="rounded bg-zinc-800 px-1">GNews</code> (with{" "}
           <code className="rounded bg-zinc-800 px-1">GNEWS_API_KEY</code>) plus Yahoo headlines. Enter
-          one or more tickers (e.g. SPY or SPY,NVDA) to bias the search.
+          one or more tickers (e.g. SPY or SPY,NVDA) to bias the search. Blank defaults to your holdings.
         </p>
 
         {newsLoading && (
@@ -428,7 +452,7 @@ function InsightsContent({ userId }: { userId: string }) {
               </span>
             </div>
             <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {(newsFeed.articles ?? []).slice(0, 15).map((a, i) => (
+              {(newsFeed.articles ?? []).slice(0, 6).map((a, i) => (
                 <li
                   key={`${a.url ?? i}-${i}`}
                   className="flex h-full min-h-[8rem] flex-row gap-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-3 dark:bg-zinc-900/30"

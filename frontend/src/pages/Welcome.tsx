@@ -7,24 +7,24 @@ const tiers = [
   {
     id: "starter",
     name: "Starter",
-    tagline: "Get oriented without the noise.",
+    tagline: "Education-first entry — learn before you size risk.",
     price: "Free",
     highlights: [
-      "Delayed quotes & macro snapshots",
-      "Market Pulse overview",
-      "Learn Hub starter modules",
+      "Market Pulse & Learn Hub (modules, quizzes)",
+      "AI tutor when Gemini/OpenAI keys are on the API",
+      "Transparent “not advice” framing for inclusion",
     ],
     cta: "Start free",
   },
   {
     id: "plus",
     name: "Plus",
-    tagline: "For investors tracking real positions.",
+    tagline: "Research habits + real portfolio tracking.",
     price: "$12/mo",
     highlights: [
-      "Real portfolio tracker (return, CAGR)",
-      "Paper Lab + sentiment headlines",
-      "Alerts & webhook tests",
+      "Real portfolio: return, CAGR, AI holdings coach",
+      "Insights: news AI, paper-lab strategy, cross-asset chains",
+      "Paper Lab, alerts, webhook tests",
     ],
     cta: "Choose Plus",
     featured: true,
@@ -32,12 +32,12 @@ const tiers = [
   {
     id: "pro",
     name: "Pro",
-    tagline: "AI co-pilot for sizing and discipline.",
+    tagline: "Full AI layer for research velocity.",
     price: "$29/mo",
     highlights: [
-      "Gemini-powered insights & audio briefings",
-      "Strategy nudges tied to your holdings",
-      "Commodity lens & cross-asset chains",
+      "Gemini/OpenAI pipelines across Insights & Learn",
+      "Audio briefings (ElevenLabs when configured)",
+      "Commodity lens & advanced market context",
     ],
     cta: "Go Pro",
   },
@@ -79,12 +79,13 @@ export function Welcome() {
             Welcome to FinSight
           </p>
           <h1 className="mx-auto mt-4 max-w-2xl text-4xl font-semibold tracking-tight sm:text-5xl">
-            Your AI investing co-pilot
+            AI for education, research &amp; your portfolio
           </h1>
-          <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-zinc-400">
-            See the market clearly, stress-test ideas in Paper Lab, and track{" "}
-            <span className="text-zinc-200">real money performance</span> with return and CAGR —
-            then let context-aware insights help you stay disciplined.
+          <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-zinc-400">
+            Built around <span className="text-zinc-200">financial education and inclusion</span> (Learn Hub,
+            explainers, AI tutor) and <span className="text-zinc-200">investment research &amp; portfolio support</span>{" "}
+            (live tape, headline AI, holdings coach) — practical for the AI-in-finance case study: user-centred,
+            efficient, with clear limits and no personalized trade instructions.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <Link
@@ -107,9 +108,30 @@ export function Welcome() {
           </p>
         </div>
 
+        <section className="mt-16 grid gap-4 md:grid-cols-2">
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/15 p-6 text-left">
+            <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300/90">
+              Financial education &amp; inclusion
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+              Self-serve modules, quizzes, certificates, and an LLM tutor that answers in plain English — lowering the
+              jargon barrier for new investors.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-950/10 p-6 text-left">
+            <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300/90">
+              Investment research &amp; portfolio support
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+              Market Pulse, AI news summaries, cross-asset reasoning, and a coach on your real holdings — supporting how
+              you research and reflect, without placing trades for you.
+            </p>
+          </div>
+        </section>
+
         <section className="mt-20">
           <h2 className="text-center text-sm font-semibold uppercase tracking-[0.2em] text-zinc-500">
-            Three ways to use FinSight
+            Plans at a glance
           </h2>
           <p className="mx-auto mt-2 max-w-lg text-center text-xs text-zinc-500">
             Tap a tier to read what&apos;s included. Billing flows are not wired in this demo —

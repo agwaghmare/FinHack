@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from datetime import date, datetime, timezone
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -10,6 +12,57 @@ import pandas as pd
 from backend.services.market_service import get_market_prices
 
 _store: dict[str, list[dict[str, Any]]] = {}
+_STORE_PATH = Path(__file__).resolve().parents[1] / "data" / "holdings_store.json"
+
+
+def _load_store() -> None:
+    global _store
+    try:
+        if _STORE_PATH.exists():
+            raw = json.loads(_STORE_PATH.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                clean: dict[str, list[dict[str, Any]]] = {}
+                for uid, rows in raw.items():
+                    if not isinstance(uid, str) or not isinstance(rows, list):
+                        continue
+                    out_rows: list[dict[str, Any]] = []
+                    for r in rows:
+                        if not isinstance(r, dict):
+                            continue
+                        sym = str(r.get("symbol") or "").upper().strip()
+                        try:
+                            sh = float(r.get("shares") or 0)
+                            ac = float(r.get("avg_cost") or 0)
+                        except (TypeError, ValueError):
+                            continue
+                        od = str(r.get("opened_at") or _today_iso())[:10]
+                        if sym and sh > 0 and ac > 0:
+                            out_rows.append(
+                                {
+                                    "symbol": sym,
+                                    "shares": sh,
+                                    "avg_cost": ac,
+                                    "opened_at": od,
+                                }
+                            )
+                    if out_rows:
+                        clean[uid] = out_rows
+                _store = clean
+    except Exception:
+        # Keep app functional even if persisted file is corrupted.
+        _store = {}
+
+
+def _save_store() -> None:
+    try:
+        _STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _STORE_PATH.write_text(
+            json.dumps(_store, ensure_ascii=True, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        # Non-fatal: runtime memory store still works.
+        pass
 
 
 def _today_iso() -> str:
@@ -59,6 +112,7 @@ def add_or_merge_position(
                 "opened_at": od,
             }
         )
+    _save_store()
     return list(rows)
 
 
@@ -66,6 +120,7 @@ def delete_position(user_id: str, symbol: str) -> list[dict[str, Any]]:
     sym = symbol.upper().strip()
     rows = _store.get(user_id, [])
     _store[user_id] = [r for r in rows if r["symbol"] != sym]
+    _save_store()
     return list(_store[user_id])
 
 
@@ -286,3 +341,6 @@ def portfolio_period_performance(user_id: str) -> dict[str, Any]:
         "periods": out,
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
+
+
+_load_store()

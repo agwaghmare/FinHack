@@ -6,6 +6,7 @@ from backend.services.gemini_chatbot_service import ask_chatbot
 from backend.services.ai_extended_service import (
     news_summary,
     portfolio_analysis,
+    real_holdings_coach,
     strategy_suggestions,
 )
 from backend.services.ai_service import explain_why_matters, generate_insight
@@ -40,9 +41,15 @@ def ai_portfolio_analysis(user_id: str):
     return portfolio_analysis(user_id)
 
 
+@router.get("/holdings-coach/{user_id}")
+def ai_holdings_coach(user_id: str):
+    """LLM coaching on real holdings: education, research prompts — not trade instructions."""
+    return real_holdings_coach(user_id)
+
+
 @router.get("/news-summary")
-def ai_news_summary():
-    return news_summary()
+def ai_news_summary(user_id: str | None = None):
+    return news_summary(user_id=user_id)
 
 
 @router.get("/strategy-suggestions/{user_id}")

@@ -606,9 +606,14 @@ export function Market() {
             Live tape & sentiment
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Stocks, crypto, and ETFs. CPI, Fed funds, and GDP live on{" "}
+            Part of our <span className="text-zinc-400">research &amp; education</span> story: live tape for stocks,
+            crypto, and ETFs. CPI, Fed funds, and GDP on{" "}
             <Link className="text-zinc-300 underline underline-offset-2" to="/commodities">
               Commodity Lens
+            </Link>
+            ; concepts &amp; tutor in{" "}
+            <Link className="text-zinc-300 underline underline-offset-2" to="/learn">
+              Learn Hub
             </Link>
             .
           </p>

@@ -14,12 +14,32 @@ import clsx from "clsx";
 import { useClerkEnabled } from "./ClerkAuth";
 
 const groups = [
-  { to: "/pulse", label: "Market Pulse", hint: "Real-time stocks, crypto, ETFs, and macro in one live view.", icon: Activity },
-  { to: "/portfolio", label: "My portfolio", hint: "Track real positions: basis, return, and CAGR from your holdings.", icon: Wallet },
+  {
+    to: "/pulse",
+    label: "Market Pulse",
+    hint: "Live tape, sentiment, and research context — see how markets move before you size a view.",
+    icon: Activity,
+  },
+  {
+    to: "/portfolio",
+    label: "My portfolio",
+    hint: "Real positions with live marks; AI can coach on diversification and research next steps (not trade orders).",
+    icon: Wallet,
+  },
   { to: "/paper-lab", label: "Paper Lab", hint: "Simulated trades, P&L, and leaderboard — experiment without capital risk.", icon: FlaskConical },
-  { to: "/insights", label: "Insights", hint: "GNews & Yahoo headlines, Gemini summaries, and strategy notes in plain English.", icon: Brain },
+  {
+    to: "/insights",
+    label: "Insights",
+    hint: "AI summaries on news & paper portfolio, plus cross-asset chains — investment research support in plain English.",
+    icon: Brain,
+  },
   { to: "/commodities", label: "Commodity Lens", hint: "Oil, metals, ag proxies, macro context, and what-if stress paths.", icon: Gem },
-  { to: "/learn", label: "Learn Hub", hint: "Interactive modules, quizzes, and demo certificates.", icon: BookOpen },
+  {
+    to: "/learn",
+    label: "Learn Hub",
+    hint: "Modules, quizzes, certificates, and an AI tutor for financial education & inclusion.",
+    icon: BookOpen,
+  },
   { to: "/alerts", label: "Alerts Center", hint: "Risk, news, and webhook tests — your actionable signal inbox.", icon: BellRing },
 ];
 
@@ -37,7 +57,7 @@ export function Sidebar() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">
             FinSight
           </p>
-          <p className="text-sm font-semibold tracking-tight text-zinc-100">Terminal</p>
+          <p className="text-sm font-semibold tracking-tight text-zinc-100">Education · Research</p>
         </div>
       </div>
 
