@@ -274,6 +274,8 @@ export async function postMarketPodcastGenerate(session: PodcastSession = "close
   status?: string;
   generated_at?: string | null;
   session?: string;
+  message?: string;
+  script_preview?: string;
 }> {
   return j(`/market/podcast/generate?session=${encodeURIComponent(session)}`, {
     method: "POST",

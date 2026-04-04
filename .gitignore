@@ -2,3 +2,13 @@
 
 backend/data/holdings_store.json
 backend/data/learn_community.json
+
+# Python / tooling (do not commit virtualenvs or bytecode)
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Frontend dependencies (install with npm ci / npm install)
+frontend/node_modules/

@@ -7,6 +7,7 @@ import {
   MistralFormattedText,
   MistralInsightPanel,
 } from "../components/MistralInsightPanel";
+import { SuggestedPortfolio } from "../components/SuggestedPortfolio";
 
 type PositionRow = {
   symbol: string;
@@ -307,6 +308,8 @@ export function RealPortfolio() {
           symbols or try again in a moment.
         </p>
       )}
+
+      <SuggestedPortfolio />
 
       <MistralInsightPanel
         id="holdings-coach"

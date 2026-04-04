@@ -35,7 +35,12 @@ const groups = [
     hint: "AI summaries on news & paper portfolio, plus cross-asset chains — investment research support in plain English.",
     icon: Brain,
   },
-  { to: "/macro-regime", label: "Macro Regime", hint: "Oil, metals, ag proxies, macro context, and what-if stress paths.", icon: Gem },
+  {
+    to: "/macro-regime",
+    label: "Macro Regime",
+    hint: "Oil, metals, ag proxies, macro context. Cross-asset stress lab lives on Learn.",
+    icon: Gem,
+  },
   {
     to: "/learn",
     label: "Learn Hub",

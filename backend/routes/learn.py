@@ -14,6 +14,7 @@ from backend.services.learn_community_service import (
     list_posts as community_list_posts,
     risk_preview as community_risk_preview,
 )
+from backend.services.learn_service import certificate as build_certificate
 from backend.services.voice_service import text_to_speech
 
 router = APIRouter()
@@ -72,14 +73,7 @@ def submit_quiz(module_id: str, body: dict):
 
 @router.get("/certificate/{user_id}/{module_id}")
 def certificate(user_id: str, module_id: str):
-    title = next((m["title"] for m in LEARN_MODULES if m["id"] == module_id), module_id)
-    return {
-        "user_id": user_id,
-        "module_id": module_id,
-        "title": title,
-        "credential": f"cert-{module_id}-{user_id[:8]}",
-        "message": "Demo certificate — complete quiz with score ≥ 60 for full unlock.",
-    }
+    return build_certificate(user_id, module_id)
 
 
 @router.post("/tutor")

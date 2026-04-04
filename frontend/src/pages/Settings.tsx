@@ -1,7 +1,17 @@
+import { useUser } from "@clerk/clerk-react";
 import { useEffect, useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
+import { InvestmentPreferencesFields } from "../components/InvestmentPreferencesFields";
 import { ThemeToggle } from "../components/ThemeToggle";
 import { api, apiBase } from "../lib/api";
+import {
+  FINHACK_INVESTMENT_PREFS_KEY,
+  type InvestmentPrefs,
+  type InvestmentStyleId,
+  type RiskToleranceId,
+  defaultInvestmentPrefs,
+  parseInvestmentPrefs,
+} from "../lib/investmentPreferences";
 
 type Health = {
   status?: string;
@@ -198,6 +208,108 @@ function NotificationAndDigestSettings() {
   );
 }
 
+function InvestmentPreferencesSettings() {
+  const { user, isLoaded } = useUser();
+  const [prefs, setPrefs] = useState<InvestmentPrefs>(() => defaultInvestmentPrefs());
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    setPrefs(parseInvestmentPrefs(user.unsafeMetadata?.[FINHACK_INVESTMENT_PREFS_KEY]));
+  }, [user]);
+
+  async function save() {
+    if (!user) return;
+    setSaving(true);
+    setMessage(null);
+    const next: InvestmentPrefs = {
+      ...prefs,
+      onboardingComplete: true,
+      updatedAt: new Date().toISOString(),
+    };
+    try {
+      await user.update({
+        unsafeMetadata: {
+          ...user.unsafeMetadata,
+          [FINHACK_INVESTMENT_PREFS_KEY]: next,
+        },
+      });
+      setPrefs(next);
+      setMessage("Saved.");
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function setRisk(id: RiskToleranceId) {
+    setPrefs((p) => ({ ...p, riskTolerance: id }));
+  }
+
+  function toggleStyle(id: InvestmentStyleId) {
+    setPrefs((p) => {
+      const next = new Set(p.styles);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return { ...p, styles: [...next] };
+    });
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="glass max-w-2xl rounded-2xl p-6">
+        <p className="text-sm text-zinc-500">Loading preferences…</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  return (
+    <div className="glass max-w-2xl rounded-2xl p-6">
+      <p className="text-sm font-semibold text-zinc-900 dark:text-white">Investment preferences</p>
+      <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+        Risk tolerance and style focus help us frame insights and examples for research and education. They are
+        not investment recommendations.
+      </p>
+      <div className="mt-6">
+        <InvestmentPreferencesFields
+          riskTolerance={prefs.riskTolerance}
+          styles={prefs.styles}
+          onRiskChange={setRisk}
+          onToggleStyle={toggleStyle}
+          disabled={saving}
+        />
+      </div>
+      <div className="mt-8 flex flex-wrap items-center gap-4">
+        <button
+          type="button"
+          disabled={saving}
+          onClick={() => void save()}
+          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white dark:bg-white dark:text-zinc-900"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          Save preferences
+        </button>
+        {prefs.updatedAt ? (
+          <span className="text-xs text-zinc-500">
+            Last updated: {new Date(prefs.updatedAt).toLocaleString()}
+          </span>
+        ) : null}
+        {message ? (
+          <span className={`text-sm ${message === "Saved." ? "text-emerald-600 dark:text-emerald-400" : "text-amber-700 dark:text-amber-200"}`}>
+            {message}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function Badge({
   ok,
   label,
@@ -222,8 +334,26 @@ function Badge({
   );
 }
 
+type IntegrationStatus = {
+  gnews?: boolean;
+  fred?: boolean;
+  gemini?: boolean;
+  openai?: boolean;
+  mistral?: boolean;
+  elevenlabs?: boolean;
+  clerk_publishable?: boolean;
+  clerk_secret?: boolean;
+  alpaca?: boolean;
+  zapier_webhook?: boolean;
+  twilio_sms?: boolean;
+  twilio_account_sid?: boolean;
+  twilio_auth_token?: boolean;
+  twilio_from_number?: boolean;
+  twilio_alert_to?: boolean;
+};
+
 export function Settings() {
-  const [status, setStatus] = useState<Record<string, boolean> | null>(null);
+  const [status, setStatus] = useState<IntegrationStatus | null>(null);
   const [health, setHealth] = useState<Health | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -236,7 +366,7 @@ export function Settings() {
       try {
         const [s, h] = await Promise.all([api.integrationStatus().catch(() => ({})), api.health().catch(() => ({}))]);
         if (!cancelled) {
-          setStatus(s);
+          setStatus(s as IntegrationStatus);
           setHealth(h as Health);
         }
       } catch (e) {
@@ -278,6 +408,8 @@ export function Settings() {
         </p>
       )}
 
+      <InvestmentPreferencesSettings />
+
       <div className="glass rounded-2xl p-6">
         <p className="text-sm font-semibold text-zinc-900 dark:text-white">Live API</p>
         <p className="mt-1 text-xs text-zinc-500">
@@ -295,6 +427,7 @@ export function Settings() {
               />
               <Badge ok={health.market_cross_asset === true} label="Cross-asset" />
               <Badge ok={health.ai_explain === true} label="/ai/explain" />
+              <Badge ok={health.mistral_key_loaded === true} label="Mistral key (health)" />
             </div>
           </div>
         )}
@@ -318,6 +451,28 @@ export function Settings() {
           <Badge ok={!!s.zapier_webhook} label="Zapier webhook" />
           <Badge ok={!!s.twilio_sms} label="Twilio SMS" />
         </div>
+        {!s.twilio_sms && (
+          <p className="mt-3 max-w-2xl text-xs leading-relaxed text-zinc-500">
+            Twilio SMS sends only when all of these are set in the API <code className="rounded bg-zinc-200/50 px-1 dark:bg-zinc-800">.env</code>:{" "}
+            <code className="text-[11px]">TWILIO_ACCOUNT_SID</code>,{" "}
+            <code className="text-[11px]">TWILIO_AUTH_TOKEN</code> (not the Account SID),{" "}
+            <code className="text-[11px]">TWILIO_FROM_NUMBER</code> (your Twilio number, E.164), and{" "}
+            <code className="text-[11px]">ALERT_SMS_TO</code> (your phone, E.164). Restart uvicorn after edits.
+            {!s.twilio_from_number || !s.twilio_alert_to ? (
+              <>
+                {" "}
+                Missing now: {!s.twilio_from_number ? "from-number " : ""}
+                {!s.twilio_alert_to ? "ALERT_SMS_TO " : ""}
+              </>
+            ) : null}
+          </p>
+        )}
+        {!s.mistral && (
+          <p className="mt-2 max-w-2xl text-xs text-zinc-500">
+            Mistral: set <code className="rounded bg-zinc-200/50 px-1 dark:bg-zinc-800">MISTRAL_API_KEY</code> in the API{" "}
+            <code className="rounded bg-zinc-200/50 px-1 dark:bg-zinc-800">.env</code> (repo root) and restart the server.
+          </p>
+        )}
       </div>
 
       <div className="glass max-w-lg rounded-2xl p-6">

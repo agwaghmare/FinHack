@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import secrets
+from datetime import datetime, timezone
 from typing import Any
 
 from backend.data.learn_modules import LEARN_MODULES, QUIZZES
@@ -42,12 +44,19 @@ def submit_quiz(module_id: str, answers: list[int]) -> dict[str, Any]:
 
 
 def certificate(user_id: str, module_id: str) -> dict[str, Any]:
+    """Issue a certificate payload with a unique hash for each request (new issuance)."""
     title = next((m["title"] for m in LEARN_MODULES if m["id"] == module_id), module_id)
+    issued_at = datetime.now(timezone.utc).isoformat()
+    # 128-bit random hex — unique per issuance without a DB (collision probability negligible).
+    cert_hash = secrets.token_hex(16)
+    credential_id = f"FS-CERT-{cert_hash}"
     return {
         "user_id": user_id,
         "module_id": module_id,
         "title": title,
-        "credential": f"cert-{module_id}-{user_id[:8]}",
+        "credential": credential_id,
+        "certificate_hash": cert_hash,
+        "issued_at": issued_at,
         "message": "Demo certificate — complete quiz with score >= 60 for full unlock.",
     }
 

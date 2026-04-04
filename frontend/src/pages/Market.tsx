@@ -15,6 +15,7 @@ import {
   postMarketPodcastGenerate,
   type PodcastSession,
 } from "../lib/api";
+import { LoginStreakBanner as PulseLoginStreakBanner } from "../components/LoginStreakBanner";
 import { PodcastPlayer } from "../components/PodcastPlayer";
 import { StockInfoPanel } from "../components/StockInfoPanel";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
@@ -653,6 +654,8 @@ export function Market() {
         </p>
       </form>
 
+      <PulseLoginStreakBanner />
+
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
@@ -738,7 +741,7 @@ export function Market() {
             </div>
           </div>
           <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">What you’ll hear (daily)</h2>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">What you'll hear (daily)</h2>
             <ul className="mt-3 space-y-2 text-xs leading-relaxed text-zinc-400">
               <li><span className="font-medium text-zinc-300">Macro:</span> broad macro headlines</li>
               <li><span className="font-medium text-zinc-300">Sector:</span> one industry/theme update</li>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
+import { useUser } from "@clerk/clerk-react";
 import {
   BookOpen,
   ExternalLink,
@@ -12,7 +13,10 @@ import {
   Users,
 } from "lucide-react";
 import { api, postLearnModuleAudio } from "../lib/api";
+import { loadCertificates, saveCertificateRecord, type StoredCertificate } from "../lib/certificateStorage";
 import { ClerkUserGate } from "../components/ClerkUserGate";
+import { CrossAssetStressLab } from "../components/CrossAssetStressLab";
+import { useCrossAssetStressLab } from "../hooks/useCrossAssetStressLab";
 
 type ModuleItem = {
   id: string;
@@ -385,6 +389,12 @@ function PeerCircleSection({ userId }: { userId: string }) {
 }
 
 function LearnContent({ userId }: { userId: string }) {
+  const { user } = useUser();
+  const displayName =
+    user?.fullName?.trim() ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ").trim() ||
+    user?.username?.trim() ||
+    "Learner";
   const location = useLocation();
   const [modules, setModules] = useState<ModuleItem[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -399,6 +409,8 @@ function LearnContent({ userId }: { userId: string }) {
   const [tutorReply, setTutorReply] = useState<string | null>(null);
   const [tutorBusy, setTutorBusy] = useState(false);
   const [tutorErr, setTutorErr] = useState<string | null>(null);
+  const [storedCerts, setStoredCerts] = useState<StoredCertificate[]>(() => loadCertificates());
+  const stressModel = useCrossAssetStressLab();
 
   useEffect(() => {
     api
@@ -448,8 +460,26 @@ function LearnContent({ userId }: { userId: string }) {
 
   async function fetchCert() {
     if (!selected) return;
-    const c = await api.learnCertificate(userId, selected);
-    setCert(c);
+    try {
+      const c = await api.learnCertificate(userId, selected);
+      setCert(c);
+      const cred = (c as { credential?: string }).credential?.trim();
+      const title =
+        (c as { title?: string }).title?.trim() || detail?.title || "Module completion";
+      if (cred) {
+        saveCertificateRecord({
+          moduleId: selected,
+          moduleTitle: title,
+          credential: cred,
+          certificate_hash: (c as { certificate_hash?: string }).certificate_hash,
+          issued_at: (c as { issued_at?: string }).issued_at,
+          userName: displayName,
+        });
+        setStoredCerts(loadCertificates());
+      }
+    } catch {
+      setCert({ error: "Could not load certificate." });
+    }
   }
 
   async function playModuleAudio(mid: string) {
@@ -608,8 +638,8 @@ function LearnContent({ userId }: { userId: string }) {
         </div>
       )}
 
-      <div className="grid gap-6 lg:grid-cols-[240px_1fr]">
-        <div id="modules" className="scroll-mt-24 space-y-2">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,260px)_1fr]">
+        <div id="modules" className="scroll-mt-24 flex flex-col gap-2">
           {modules.map((m) => (
             <button
               key={m.id}
@@ -697,7 +727,9 @@ function LearnContent({ userId }: { userId: string }) {
             )}
           </div>
 
-          <div className="glass rounded-2xl border border-violet-500/20 p-6 dark:border-violet-500/15">
+          <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+            <CrossAssetStressLab variant="page" model={stressModel} anchorId="cross-asset-stress" />
+            <div className="glass rounded-2xl border border-violet-500/20 p-6 dark:border-violet-500/15">
             <div className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-violet-400" />
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">AI tutor</h2>
@@ -752,7 +784,55 @@ function LearnContent({ userId }: { userId: string }) {
             ) : (
               <p className="mt-4 text-sm text-zinc-500">Select a module to unlock the tutor.</p>
             )}
+            </div>
           </div>
+
+          <section
+            id="certificates"
+            className="glass scroll-mt-24 rounded-2xl border border-amber-500/20 p-6 dark:border-amber-500/15"
+          >
+            <div className="flex items-center gap-2">
+              <Trophy className="h-5 w-5 text-amber-400" />
+              <h2 className="text-lg font-semibold text-white">Your certificates</h2>
+            </div>
+            <p className="mt-2 text-sm text-zinc-500">
+              Modules you&apos;ve opened with <strong className="text-zinc-400">View certificate</strong> after passing
+              are listed here. Each shows your name and credential ID from the server.
+            </p>
+            {storedCerts.length === 0 ? (
+              <p className="mt-4 rounded-xl border border-dashed border-zinc-700 px-4 py-8 text-center text-sm text-zinc-500">
+                No certificates saved yet. Pass a module quiz and use &quot;View certificate&quot; to add one.
+              </p>
+            ) : (
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+                {storedCerts.map((c) => (
+                  <li
+                    key={`${c.moduleId}-${c.credential}`}
+                    className="rounded-xl border border-zinc-700/80 bg-gradient-to-br from-zinc-900/90 to-zinc-950 p-4 shadow-inner"
+                  >
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500/90">
+                      FinSight Learn
+                    </p>
+                    <p className="mt-1 text-base font-semibold text-white">{c.moduleTitle}</p>
+                    <p className="mt-3 text-xs text-zinc-500">
+                      Learner name
+                    </p>
+                    <p className="font-medium text-zinc-200">{c.userName}</p>
+                    <p className="mt-2 text-xs text-zinc-500">Credential ID</p>
+                    <p className="break-all font-mono text-[11px] text-emerald-400/90">{c.credential}</p>
+                    {c.issued_at ? (
+                      <p className="mt-2 text-[11px] text-zinc-600">
+                        Issued {new Date(c.issued_at).toLocaleString()}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-[10px] text-zinc-600">
+                      Saved {new Date(c.savedAt).toLocaleDateString()}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
           <div id="quiz" className="glass scroll-mt-24 rounded-2xl p-6">
             <h2 className="text-lg font-semibold text-white">Quiz</h2>
@@ -761,15 +841,16 @@ function LearnContent({ userId }: { userId: string }) {
                 return (
                   <div key={i} className="rounded-xl border border-zinc-800 p-4">
                     <p className="text-sm text-zinc-200">{qq.q ?? qq.prompt}</p>
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    <div className="mt-3 flex flex-col gap-2">
                       {(qq.options ?? []).map((opt, j) => (
                         <label
                           key={j}
-                          className="flex cursor-pointer items-center gap-2 text-xs text-zinc-400"
+                          className="flex cursor-pointer items-start gap-3 rounded-lg border border-zinc-700/80 bg-zinc-900/40 px-3 py-2.5 text-sm text-zinc-300 transition hover:border-zinc-600 hover:bg-zinc-900/70 has-[:checked]:border-emerald-600/50 has-[:checked]:bg-emerald-950/30"
                         >
                           <input
                             type="radio"
                             name={`q-${i}`}
+                            className="mt-0.5 shrink-0"
                             checked={answers[i] === j}
                             onChange={() => {
                               const next = [...answers];
@@ -777,7 +858,7 @@ function LearnContent({ userId }: { userId: string }) {
                               setAnswers(next);
                             }}
                           />
-                          {opt}
+                          <span className="leading-snug">{opt}</span>
                         </label>
                       ))}
                     </div>
@@ -815,13 +896,38 @@ function LearnContent({ userId }: { userId: string }) {
               </div>
             )}
             {cert != null && (
-              <div className="mt-4 rounded-xl border border-emerald-700/40 bg-emerald-950/30 p-4 text-sm">
-                <p className="font-semibold text-emerald-100">
-                  Certificate: {(cert as { title?: string }).title ?? "Module completion"}
-                </p>
-                <p className="mt-1 text-emerald-200/80">
-                  Credential ID: {(cert as { credential?: string }).credential ?? "Pending"}
-                </p>
+              <div
+                className={`mt-4 rounded-xl border p-4 text-sm ${
+                  (cert as { error?: string }).error
+                    ? "border-amber-700/40 bg-amber-950/30 text-amber-100"
+                    : "border-emerald-700/40 bg-emerald-950/30"
+                }`}
+              >
+                {(cert as { error?: string }).error ? (
+                  <p>{(cert as { error: string }).error}</p>
+                ) : (
+                  <>
+                    <p className="font-semibold text-emerald-100">
+                      Certificate: {(cert as { title?: string }).title ?? "Module completion"}
+                    </p>
+                    <p className="mt-1 font-mono text-[11px] text-emerald-200/80">
+                      Credential ID: {(cert as { credential?: string }).credential ?? "Pending"}
+                    </p>
+                    {(cert as { certificate_hash?: string }).certificate_hash ? (
+                      <p className="mt-1 text-[11px] text-emerald-300/70">
+                        Unique hash: {(cert as { certificate_hash?: string }).certificate_hash}
+                      </p>
+                    ) : null}
+                    {(cert as { issued_at?: string }).issued_at ? (
+                      <p className="mt-1 text-[11px] text-emerald-400/60">
+                        Issued: {new Date((cert as { issued_at: string }).issued_at).toLocaleString()}
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-[11px] text-emerald-500/80">
+                      Added to <strong className="text-emerald-200/90">Your certificates</strong> above.
+                    </p>
+                  </>
+                )}
               </div>
             )}
           </div>
