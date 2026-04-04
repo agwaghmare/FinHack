@@ -237,29 +237,186 @@ Keep under 200 words."""
     }
 
 
+# def news_summary(user_id: str | None = None) -> dict[str, Any]:
+#     h = snapshot(user_id or "") if user_id else None
+#     held = [str(p.get("symbol") or "").upper() for p in (h or {}).get("positions") or [] if p.get("symbol")]
+#     symbol = ",".join(held[:5]) if held else "SPY"
+#     n = get_news_sentiment(symbol, limit=20)
+#     prompt = f"""Summarize market tone and top themes for a learner-investor building research habits. Reference sentiment score {n.get('avg_sentiment')}.
+# Headlines sample: {[a.get('title') for a in (n.get('articles') or [])[:8]]}
+# Held symbols focus: {held[:8] if held else ['SPY']}
+# If any held symbol appears in the headlines, call out that stock-specific risk in plain language.
+# No trade recommendations. Under 180 words."""
+#     return {"summary": _run(prompt), "avg_sentiment": n.get("avg_sentiment")}
+
+
+
+def strategy_suggestions(user_id: str) -> dict[str, Any]:
+    from backend.services.regime_service import detect_regime
+    from backend.services.portfolio_service import analyze_portfolio
+
+    h = snapshot(user_id)
+    held = [str(p.get("symbol") or "").upper() for p in (h or {}).get("positions") or [] if p.get("symbol")]
+    
+    # Get regime and risk data
+    regime_data = detect_regime()
+    risk_data = analyze_portfolio(user_id)
+
+    regime = regime_data.get("regime", "Unknown")
+    confidence_pct = regime_data.get("confidence_pct", 0)
+    narrative = regime_data.get("narrative", "")
+    fed_rate = regime_data.get("fed_rate")
+    cpi = regime_data.get("cpi")
+    unemployment = regime_data.get("unemployment")
+    pce = regime_data.get("pce")
+    regime_last_30d = regime_data.get("regime_last_30d", {})
+    risk_score = risk_data.get("risk_score", 0)
+    risk_label = risk_data.get("risk_label", "Unknown")
+    positions = risk_data.get("positions", [])
+
+    key = os.getenv("MISTRAL_API_KEY")
+    suggestions = None
+
+    if key:
+        try:
+            import httpx
+            prompt = f"""You are a risk-aware portfolio strategist advising a retail investor. Be direct and specific.
+
+Market Regime: {regime} (confidence: {confidence_pct}%)
+Regime context: {narrative}
+Regime last 30 days: {regime_last_30d}
+
+Macro environment:
+- Fed Funds Rate: {fed_rate}%
+- CPI: {cpi}
+- Unemployment: {unemployment}%
+- PCE: {pce}
+
+Portfolio:
+- Holdings: {held}
+- Overall risk score: {risk_score}/10 ({risk_label})
+- Position breakdown: {json.dumps(positions, default=str)[:1500]}
+
+Given this {regime} regime with {risk_label} portfolio risk, provide exactly 3 specific strategy suggestions.
+Each suggestion should reference the regime, the macro data, and specific holdings where relevant.
+Format as 3 numbered points. Be direct. Under 200 words. No disclaimers."""
+
+            response = httpx.post(
+                "https://api.mistral.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "mistral-small-latest",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 400,
+                },
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            suggestions = response.json()["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            logger.warning("Mistral strategy suggestions failed: %s", e)
+
+    # Fall back to existing pipeline
+    if not suggestions:
+        suggestions = _run(f"""Given these holdings {held} in a {regime} market regime with {risk_label} risk score ({risk_score}/10), suggest 3 risk-aware strategy adjustments. Reference the regime and macro context: Fed {fed_rate}%, CPI {cpi}, Unemployment {unemployment}%. Bullet format. Under 150 words.""")
+
+    return {
+        "user_id": user_id,
+        "suggestions": suggestions,
+        "regime": regime,
+        "confidence_pct": confidence_pct,
+        "narrative": narrative,
+        "regime_last_30d": regime_last_30d,
+        "fed_rate": fed_rate,
+        "cpi": cpi,
+        "unemployment": unemployment,
+        "pce": pce,
+        "risk_score": risk_score,
+        "risk_label": risk_label,
+    }
+
 def news_summary(user_id: str | None = None) -> dict[str, Any]:
     h = snapshot(user_id or "") if user_id else None
     held = [str(p.get("symbol") or "").upper() for p in (h or {}).get("positions") or [] if p.get("symbol")]
     symbol = ",".join(held[:5]) if held else "SPY"
     n = get_news_sentiment(symbol, limit=20)
-    prompt = f"""Summarize market tone and top themes for a learner-investor building research habits. Reference sentiment score {n.get('avg_sentiment')}.
-Headlines sample: {[a.get('title') for a in (n.get('articles') or [])[:8]]}
-Held symbols focus: {held[:8] if held else ['SPY']}
-If any held symbol appears in the headlines, call out that stock-specific risk in plain language.
-No trade recommendations. Under 180 words."""
-    return {"summary": _run(prompt), "avg_sentiment": n.get("avg_sentiment")}
+    headlines = [a.get("title") for a in (n.get("articles") or [])[:12] if a.get("title")]
+    avg_sentiment = n.get("avg_sentiment", 0)
 
+    sector_map = {
+        "AAPL": "technology", "MSFT": "technology", "NVDA": "semiconductors",
+        "GOOGL": "technology", "META": "technology", "AMZN": "consumer/cloud",
+        "TSLA": "EV/energy", "JPM": "financials", "BAC": "financials",
+        "GS": "financials", "XOM": "energy", "CVX": "energy",
+        "JNJ": "healthcare", "UNH": "healthcare", "GH": "healthcare",
+    }
+    held_with_sectors = [f"{s} ({sector_map.get(s, 'equity')})" for s in held[:6]]
 
-def strategy_suggestions(user_id: str) -> dict[str, Any]:
-    p = get_portfolio(user_id)
-    h = snapshot(user_id)
-    prompt = f"""Given this paper portfolio, suggest 3 risk-aware learning prompts (sizing concepts, hedging ideas, rebalancing discipline) — frame as education, not orders to execute.
-{p}
-Real holdings snapshot JSON: {json.dumps(h, default=str)[:7000]}
-If one symbol is concentrated, include practical risk-mitigation examples (trim exposure, protective puts, collars, bear put spread) as educational options.
-Bullet format. Under 150 words."""
-    return {"user_id": user_id, "suggestions": _run(prompt)}
+    sentiment_label = (
+        "moderately bullish" if avg_sentiment > 0.2 else
+        "moderately bearish" if avg_sentiment < -0.2 else
+        "neutral"
+    )
 
+    prompt = f"""You are a sharp market analyst writing for a retail investor. Be direct and confident.
+
+Current portfolio holdings: {held_with_sectors if held_with_sectors else ["SPY (broad market)"]}
+Overall news sentiment: {sentiment_label} (score: {avg_sentiment})
+
+Latest headlines:
+{chr(10).join(f"- {hl}" for hl in headlines)}
+
+Write a news sentiment summary with exactly these four sections:
+
+1. TOP THEMES: Identify 3-4 dominant market themes from these headlines (e.g. rates, earnings, AI, energy). Be specific.
+
+2. SENTIMENT BALANCE: Describe the bullish vs bearish balance with confident analyst language. Reference the sentiment score.
+
+3. MACRO IMPACT: Plain-English impact on growth, rates, and volatility expectations based on these headlines.
+
+4. SO WHAT: For each holding in the portfolio, write one sentence tying the headlines to that specific sector/stock. Be direct.
+
+Keep total response under 220 words. No disclaimers."""
+
+    # Try Mistral first
+    mistral_key = os.getenv("MISTRAL_API_KEY")
+    summary = None
+
+    if mistral_key:
+        try:
+            import httpx
+            response = httpx.post(
+                "https://api.mistral.ai/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {mistral_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": "mistral-small-latest",
+                    "messages": [{"role": "user", "content": prompt}],
+                    "max_tokens": 1024,
+                },
+                timeout=60.0,
+            )
+            response.raise_for_status()
+            data = response.json()
+            summary = data["choices"][0]["message"]["content"].strip()
+        except Exception as e:
+            logger.warning("Mistral news summary failed: %s", e)
+
+    # Fall back to existing Gemini/OpenAI pipeline
+    if not summary:
+        summary = _run(prompt)
+
+    return {
+        "summary": summary,
+        "avg_sentiment": avg_sentiment,
+        "sentiment_label": sentiment_label,
+        "holdings_analyzed": held[:6],
+    }
 
 def trade_feedback(user_id: str) -> dict[str, Any]:
     p = get_portfolio(user_id)
