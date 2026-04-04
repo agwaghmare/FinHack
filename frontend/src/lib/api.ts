@@ -4,7 +4,7 @@ function normalizeApiBase(raw: string | undefined): string {
   if (!t) {
     // Empty VITE_API_URL + Vite proxy (see vite.config.ts) → same-origin in dev.
     if (import.meta.env.DEV) return "";
-    return "http://127.0.0.1:8001";
+    return "http://127.0.0.1:8000";
   }
   return t.replace(/\/+$/, "");
 }

@@ -340,7 +340,7 @@ export function Settings() {
             VITE_API_URL
           </code>{" "}
           in <code className="text-xs">frontend/.env</code> (default{" "}
-          <code className="text-xs">http://127.0.0.1:8001</code>). Restart{" "}
+          <code className="text-xs">http://127.0.0.1:8000</code>). Restart{" "}
           <code className="text-xs">npm run dev</code> after edits.
         </p>
         <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">

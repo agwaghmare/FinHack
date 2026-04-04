@@ -19,6 +19,8 @@ from backend.services.news_service import NEWS_PIPELINE_ID
 _DEFAULT_ORIGINS = [
     "http://localhost:5173",
     "http://127.0.0.1:5173",
+    "http://localhost:4173",
+    "http://127.0.0.1:4173",
     "http://localhost:8000",
     "http://127.0.0.1:8000",
     "http://localhost:8001",
@@ -35,12 +37,17 @@ app = FastAPI(
     version="1.0.0",
 )
 
+_cors_regex = os.getenv("CORS_ORIGIN_REGEX", "").strip()
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex=_cors_regex or None,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    # Chrome may send Access-Control-Request-Private-Network for loopback APIs; without this, preflight fails → "Failed to fetch".
+    allow_private_network=True,
 )
 
 app.include_router(api_router)

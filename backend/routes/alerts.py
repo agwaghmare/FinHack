@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 
 from fastapi import APIRouter, Body, Depends
 
@@ -10,7 +10,7 @@ router = APIRouter()
 
 @router.post("/trigger")
 def trigger(
-    clerk_user: Annotated[dict[str, Any] | None, Depends(optional_clerk_user)],
+    clerk_user: Annotated[Optional[dict[str, Any]], Depends(optional_clerk_user)],
     payload: dict = Body(default_factory=dict),
 ):
     """

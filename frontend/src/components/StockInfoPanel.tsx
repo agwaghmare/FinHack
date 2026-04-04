@@ -47,8 +47,17 @@ export function StockInfoPanel({
       .then((r) => {
         if (!cancelled) setData(r as StockInfoPayload);
       })
-      .catch(() => {
-        if (!cancelled) setData({ error: "Could not load company data" });
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          const msg = e instanceof Error ? e.message : String(e);
+          const looksLikeNetwork =
+            !msg || msg === "Failed to fetch" || msg === "NetworkError when attempting to fetch resource.";
+          setData({
+            error: looksLikeNetwork
+              ? "Could not load company data — ensure FastAPI is running (uvicorn on port 8000) and restart `npm run dev` so the Vite proxy picks up frontend/.env."
+              : `Could not load company data (${msg})`,
+          });
+        }
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

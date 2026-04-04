@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -21,7 +23,7 @@ class HoldingIn(BaseModel):
     symbol: str = Field(..., min_length=1, max_length=32)
     shares: float = Field(..., gt=0)
     avg_cost: float = Field(..., gt=0, description="Average cost per share in USD")
-    opened_at: str | None = Field(
+    opened_at: Optional[str] = Field(
         default=None,
         description="First buy date YYYY-MM-DD (for CAGR); defaults to today",
     )

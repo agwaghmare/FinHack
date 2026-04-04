@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from google.genai import Client
 
 from backend.utils.env_keys import gemini_key

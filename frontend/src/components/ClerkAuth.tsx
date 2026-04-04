@@ -1,11 +1,8 @@
 import { ClerkProvider, useAuth, SignIn, SignUp } from "@clerk/clerk-react";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { setClerkTokenGetter } from "../lib/api";
+import { apiBase, setClerkTokenGetter } from "../lib/api";
 
 export const ClerkEnabledContext = createContext(false);
-
-const apiBase =
-  import.meta.env.VITE_API_URL ?? "http://127.0.0.1:8001";
 
 function TokenBridge() {
   const { getToken, isLoaded } = useAuth();

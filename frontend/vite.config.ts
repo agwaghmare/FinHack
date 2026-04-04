@@ -1,7 +1,8 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const API = process.env.VITE_PROXY_API ?? "http://127.0.0.1:8001";
+/** Must match `uvicorn` port (default 8000). Override with VITE_PROXY_API if needed. */
+const API = process.env.VITE_PROXY_API ?? "http://127.0.0.1:8000";
 
 export default defineConfig({
   plugins: [react()],
@@ -25,6 +26,7 @@ export default defineConfig({
       "/trade": { target: API, changeOrigin: true },
       "/learn": { target: API, changeOrigin: true },
       "/health": { target: API, changeOrigin: true },
+      "/api": { target: API, changeOrigin: true },
     },
   },
 });

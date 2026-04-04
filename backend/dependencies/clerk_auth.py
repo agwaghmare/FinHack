@@ -1,15 +1,13 @@
 """FastAPI dependencies for Clerk session tokens."""
 
-from __future__ import annotations
-
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 
 from fastapi import Depends, Header, HTTPException
 
 from backend.services.clerk_service import verify_clerk_session_jwt
 
 
-async def bearer_token(authorization: str | None = Header(None)) -> str | None:
+async def bearer_token(authorization: Optional[str] = Header(None)) -> Optional[str]:
     if not authorization:
         return None
     if not authorization.startswith("Bearer "):
@@ -18,8 +16,8 @@ async def bearer_token(authorization: str | None = Header(None)) -> str | None:
 
 
 async def optional_clerk_user(
-    token: Annotated[str | None, Depends(bearer_token)],
-) -> dict[str, Any] | None:
+    token: Annotated[Optional[str], Depends(bearer_token)],
+) -> Optional[dict[str, Any]]:
     if not token:
         return None
     try:
@@ -32,7 +30,7 @@ async def optional_clerk_user(
 
 
 async def require_clerk_user(
-    token: Annotated[str | None, Depends(bearer_token)],
+    token: Annotated[Optional[str], Depends(bearer_token)],
 ) -> dict[str, Any]:
     if not token:
         raise HTTPException(status_code=401, detail="Missing Authorization Bearer token")

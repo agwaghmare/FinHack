@@ -1,5 +1,7 @@
 """Learn section — modules, quizzes, certificates (demo)."""
 
+from typing import Optional
+
 from fastapi import APIRouter
 from fastapi.responses import Response
 
@@ -57,7 +59,7 @@ def certificate(user_id: str, module_id: str):
 
 
 @router.post("/audio/{module_id}")
-def learn_audio(module_id: str, body: dict | None = None):
+def learn_audio(module_id: str, body: Optional[dict] = None):
     text = (body or {}).get("text") or ""
     if not text:
         m = next((x for x in LEARN_MODULES if x["id"] == module_id), None)
