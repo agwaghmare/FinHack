@@ -1,5 +1,6 @@
 """FastAPI entry — uses `backend` package (your layout)."""
 
+import logging
 import os
 from pathlib import Path
 
@@ -8,9 +9,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # Always load keys from the repo root (folder containing this file), not only from CWD.
+# utf-8-sig strips a UTF-8 BOM so the first key is not "\ufeffGEMINI_API_KEY".
 _ROOT = Path(__file__).resolve().parent
-load_dotenv(_ROOT / ".env")
-load_dotenv()  # optional overrides if the shell cwd has another .env
+load_dotenv(_ROOT / ".env", encoding="utf-8-sig")
+load_dotenv(encoding="utf-8-sig")  # optional overrides if the shell cwd has another .env
+
+_logger = logging.getLogger("uvicorn.error")
 
 from backend.routes.router import api_router
 from backend.services.market_service import MARKET_QUOTES_PROVIDER
@@ -62,7 +66,15 @@ def _route_paths() -> set[str]:
 
 
 @app.on_event("startup")
-def _start_market_podcast_scheduler() -> None:
+def _startup_checks() -> None:
+    from backend.utils.env_keys import gemini_key, openai_key
+
+    if not gemini_key() and not openai_key():
+        _logger.warning(
+            "AI keys not loaded: set GEMINI_API_KEY or GOOGLE_API_KEY (or OPENAI_API_KEY) in "
+            "the repo root .env next to app.py, save the file, then restart uvicorn. "
+            "frontend/.env is not read by the Python API."
+        )
     # Starts a background job to generate the market-close podcast.
     try:
         from backend.services.market_podcast_service import start_market_podcast_scheduler
@@ -90,6 +102,8 @@ def root():
 
 @app.get("/health")
 def health():
+    from backend.utils.env_keys import gemini_key, openai_key
+
     paths = _route_paths()
     return {
         "status": "ok",
@@ -99,4 +113,6 @@ def health():
         "market_ohlc_api_prefix": "/api/market/ohlc" in paths,
         "market_cross_asset": "/market/cross-asset" in paths,
         "ai_explain": "/ai/explain" in paths,
+        "gemini_key_loaded": bool(gemini_key()),
+        "openai_key_loaded": bool(openai_key()),
     }

@@ -162,7 +162,7 @@ export const api = {
     j(
       `/learn/certificate/${encodeURIComponent(userId)}/${encodeURIComponent(moduleId)}`,
     ),
-  /** Module-scoped LLM tutor (financial education; uses Gemini/OpenAI when configured). */
+  /** Module-scoped LLM tutor — same AI pipeline as Insights (Gemini, then OpenAI fallback). */
   learnTutor: (moduleId: string, question: string) =>
     j("/learn/tutor", {
       method: "POST",

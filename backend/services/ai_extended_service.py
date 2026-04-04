@@ -22,8 +22,6 @@ DEMO_REPLY = (
 _GEMINI_COOLDOWN_UNTIL_TS = 0.0
 _GEMINI_COOLDOWN_SECS = int(os.getenv("GEMINI_QUOTA_COOLDOWN_SECONDS", "120"))
 _GEMINI_LAST_KEY = ""
-_LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "llama3.2")
-_LOCAL_LLM_URL = os.getenv("LOCAL_LLM_URL", "http://127.0.0.1:11434/api/generate")
 
 # Omit *-latest aliases — they often 404 on v1beta. Override with GEMINI_MODEL_FALLBACKS=comma,separated
 def _gemini_model_list() -> tuple[str, ...]:
@@ -110,43 +108,14 @@ def _openai_complete(prompt: str) -> str | None:
     return None
 
 
-def _local_llm_complete(prompt: str) -> str | None:
-    """Local LLM via Ollama (no API key)."""
-    try:
-        import httpx
-
-        r = httpx.post(
-            _LOCAL_LLM_URL,
-            json={
-                "model": _LOCAL_LLM_MODEL,
-                "prompt": prompt,
-                "stream": False,
-                "options": {"temperature": 0.35},
-            },
-            timeout=90.0,
-        )
-        r.raise_for_status()
-        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        text = str(data.get("response") or "").strip()
-        if text:
-            return text
-    except Exception as e:
-        logger.info("Local LLM unavailable (%s): %s", _LOCAL_LLM_MODEL, e)
-    return None
-
-
 def _run(prompt: str) -> str:
     global _GEMINI_COOLDOWN_UNTIL_TS, _GEMINI_LAST_KEY
     gkey = gemini_key()
-    # Prefer local LLM first (Ollama, no API key required).
-    local = _local_llm_complete(prompt)
-    if local:
-        return local
 
     if not gkey and not openai_key():
         return (
-            "Local LLM is not running. Install/start Ollama and pull a model, e.g. "
-            "`ollama pull llama3.2` then `ollama run llama3.2`. "
+            "AI is not configured. Set GEMINI_API_KEY or OPENAI_API_KEY in the API .env file "
+            "(repo root, next to app.py), then restart the server. "
             + DEMO_REPLY
         )
 
@@ -266,16 +235,19 @@ def learn_tutor_reply(
     user_question: str,
 ) -> dict[str, Any]:
     topics_s = ", ".join(topics or [])[:500]
-    prompt = f"""You are a patient financial literacy tutor. Priorities: (1) financial education and inclusion — plain English, briefly define jargon; (2) help learners think about investment research — concepts and tradeoffs — but NEVER personalized buy/sell/hold, price targets, or tax/legal instructions (say to consult a licensed professional when needed).
+    system = """You are a financial literacy tutor: plain English, define jargon briefly, focus on concepts (not personalized buy/sell/hold, price targets, or tax/legal advice — say to consult a licensed professional when needed).
 
-Module: {module_title}
+CRITICAL: Obey the learner's requested format and length first. Examples: "one sentence" → reply with exactly one sentence; "three bullets" → exactly three bullets; "one paragraph" → one short paragraph only.
+If they do not specify length, keep the default answer short (at most 2–4 sentences or a few bullets). Only go longer if they explicitly ask for detail, depth, or examples."""
+    user_block = f"""Module: {module_title}
 Summary: {module_summary[:1800]}
 Topics: {topics_s}
 
 Learner question: {user_question}
 
-Answer in clear paragraphs or short bullets. If the question is unrelated to finance or this module, acknowledge briefly and steer back. Max ~320 words."""
-    return {"reply": _run(prompt)}
+If the question is unrelated to finance or this module, acknowledge briefly and steer back in one or two sentences."""
+    full_prompt = f"{system}\n\n{user_block}"
+    return {"reply": _run(full_prompt)}
 
 
 def real_holdings_coach(user_id: str) -> dict[str, Any]:

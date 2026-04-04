@@ -67,7 +67,7 @@ def certificate(user_id: str, module_id: str):
 
 @router.post("/tutor")
 def learn_tutor(body: LearnTutorIn):
-    """Ask an LLM tutor about the selected module (Gemini/OpenAI via shared AI pipeline)."""
+    """Ask an LLM tutor about the selected module (Gemini/OpenAI via shared `_run` pipeline)."""
     m = next((x for x in LEARN_MODULES if x["id"] == body.module_id), None)
     if not m:
         return {"error": "unknown_module", "module_id": body.module_id}
