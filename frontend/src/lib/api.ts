@@ -4,7 +4,7 @@ function normalizeApiBase(raw: string | undefined): string {
   if (!t) {
     // Empty VITE_API_URL + Vite proxy (see vite.config.ts) → same-origin in dev.
     if (import.meta.env.DEV) return "";
-    return "http://127.0.0.1:8001";
+    return "http://127.0.0.1:8000";
   }
   return t.replace(/\/+$/, "");
 }
@@ -111,6 +111,11 @@ export const api = {
   /** MV-weighted period returns (1m, ytd, 1y, 5y) from yfinance adjusted closes. */
   portfolioPerformance: (userId: string) =>
     j(`/portfolio/holdings/${encodeURIComponent(userId)}/performance`),
+  /** Holdings equity curve (capital growth over time). */
+  portfolioEquityCurve: (userId: string, period = "1y") =>
+    j(
+      `/portfolio/holdings/${encodeURIComponent(userId)}/equity-curve?period=${encodeURIComponent(period)}`,
+    ),
   insight: (data: unknown) =>
     j("/ai/insight", {
       method: "POST",
@@ -162,7 +167,7 @@ export const api = {
     j(
       `/learn/certificate/${encodeURIComponent(userId)}/${encodeURIComponent(moduleId)}`,
     ),
-  /** Module-scoped LLM tutor (financial education; uses Gemini/OpenAI when configured). */
+  /** Learn tutor — Mistral AI chat. */
   learnTutor: (moduleId: string, question: string) =>
     j("/learn/tutor", {
       method: "POST",
@@ -180,6 +185,7 @@ export const api = {
       news_pipeline?: string;
       market_cross_asset?: boolean;
       ai_explain?: boolean;
+      mistral_key_loaded?: boolean;
     }>("/health"),
   triggerAlert: (payload: Record<string, unknown>) =>
     j("/alerts/trigger", {

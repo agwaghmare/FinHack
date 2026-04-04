@@ -173,12 +173,18 @@ def market_podcast_generate(
     ),
 ):
     audio = generate_market_podcast_audio(session)
-    _, generated_at = get_latest_podcast_audio(session)
+    script, generated_at = get_latest_podcast_script(session)
     if not audio:
+        msg = (
+            "Podcast audio generation failed (likely TTS provider key/plan issue). "
+            "Script generated from live data is still available."
+        )
         return {
             "status": "generated_script_only",
             "session": session,
             "generated_at": generated_at.isoformat() if generated_at else None,
+            "message": msg,
+            "script_preview": (script or "")[:220],
         }
     return {"status": "generated", "session": session, "generated_at": generated_at.isoformat() if generated_at else None}
 

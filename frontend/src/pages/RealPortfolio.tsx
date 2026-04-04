@@ -312,8 +312,7 @@ export function RealPortfolio() {
               <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">AI holdings coach</h2>
             </div>
             <p className="mt-2 max-w-2xl text-xs text-zinc-500">
-              Runs on your current snapshot via Gemini/OpenAI (same keys as Insights). Plain-language concentration &
-              research ideas — not buy/sell advice. Configure keys in API <code className="rounded bg-zinc-200/80 px-1 dark:bg-zinc-800">.env</code>.
+              Uses <strong className="font-medium text-zinc-600 dark:text-zinc-400">Mistral AI</strong>. Not buy/sell advice.
             </p>
           </div>
           <button
@@ -339,7 +338,7 @@ export function RealPortfolio() {
       <div className="grid gap-6 lg:grid-cols-5">
         <form
           onSubmit={addHolding}
-          className="glass rounded-2xl border border-zinc-200/60 p-5 dark:border-zinc-800/80 lg:col-span-2"
+          className="glass rounded-2xl border border-zinc-200/70 bg-white/80 p-5 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60 lg:col-span-2"
         >
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Add holding</h2>
           <p className="mt-1 text-xs text-zinc-500">
@@ -367,7 +366,7 @@ export function RealPortfolio() {
                 inputMode="decimal"
               />
             </div>
-            <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+            <div className="rounded-xl border border-zinc-200 bg-zinc-50/90 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/50">
               <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] font-medium uppercase text-zinc-500">Live price → cost basis</p>
                 <button
@@ -391,7 +390,7 @@ export function RealPortfolio() {
                 </p>
               ) : priceMatchesTicker && livePrice != null && livePrice > 0 ? (
                 <div className="mt-2">
-                  <p className="text-xl font-semibold tabular-nums text-zinc-900 dark:text-white">
+                  <p className="text-2xl font-semibold tabular-nums text-zinc-900 dark:text-white">
                     ${livePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}
                   </p>
                   {quoteName ? (
@@ -420,13 +419,13 @@ export function RealPortfolio() {
               !symbol.trim() ||
               !shares.trim()
             }
-            className="mt-4 w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-semibold text-white disabled:opacity-60 dark:bg-white dark:text-zinc-900"
+            className="mt-4 w-full rounded-xl bg-zinc-900 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-60 dark:bg-white dark:text-zinc-900"
           >
             {saving ? "Saving…" : "Add to portfolio"}
           </button>
         </form>
 
-        <div className="glass rounded-2xl border border-zinc-200/60 dark:border-zinc-800/80 lg:col-span-3">
+        <div className="glass rounded-2xl border border-zinc-200/70 bg-white/80 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60 lg:col-span-3">
           <div className="border-b border-zinc-200/60 px-5 py-4 dark:border-zinc-800/80">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Holdings</h2>
           </div>
@@ -441,7 +440,7 @@ export function RealPortfolio() {
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[640px] text-left text-sm">
-                <thead className="text-[11px] uppercase text-zinc-500">
+                <thead className="bg-zinc-100/70 text-[11px] uppercase text-zinc-600 dark:bg-zinc-900/70 dark:text-zinc-500">
                   <tr>
                     <th className="px-4 py-3 font-medium">Symbol</th>
                     <th className="px-4 py-3 font-medium tabular-nums">Shares</th>
@@ -455,8 +454,8 @@ export function RealPortfolio() {
                 </thead>
                 <tbody className="divide-y divide-zinc-200/60 dark:divide-zinc-800/80">
                   {snap.positions.map((p) => (
-                    <tr key={p.symbol} className="text-zinc-700 dark:text-zinc-200">
-                      <td className="px-4 py-3 font-medium">{p.symbol}</td>
+                    <tr key={p.symbol} className="text-zinc-700 transition hover:bg-zinc-100/50 dark:text-zinc-200 dark:hover:bg-zinc-900/50">
+                      <td className="px-4 py-3 font-semibold tracking-wide">{p.symbol}</td>
                       <td className="px-4 py-3 tabular-nums">{p.shares}</td>
                       <td className="px-4 py-3 tabular-nums">${p.avg_cost.toFixed(2)}</td>
                       <td className="px-4 py-3 tabular-nums">
@@ -499,7 +498,7 @@ export function RealPortfolio() {
         </div>
       </div>
 
-      <section className="glass rounded-2xl border border-zinc-200/60 p-6 dark:border-zinc-800/80">
+      <section className="glass rounded-2xl border border-zinc-200/70 bg-white/80 p-6 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Connect your broker</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
           Securely connect brokerage accounts to sync holdings, balances, and trade history. (Planned
@@ -538,9 +537,9 @@ function Kpi({
   hint?: string;
 }) {
   return (
-    <div className="glass rounded-2xl border border-zinc-200/60 p-4 dark:border-zinc-800/80">
+    <div className="glass rounded-2xl border border-zinc-200/70 bg-white/80 p-4 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60">
       <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="mt-2 text-lg font-semibold tabular-nums text-zinc-900 dark:text-white">
+      <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-900 dark:text-white">
         {value}
       </p>
       {hint && <p className="mt-1 text-[10px] text-zinc-500">{hint}</p>}

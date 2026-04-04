@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -254,17 +254,17 @@ def _symbol_period_returns_pct(sym: str) -> dict[str, float | None]:
     if hist is None or hist.empty or "Close" not in hist.columns:
         return {"1m": None, "ytd": None, "1y": None, "5y": None}
 
-    closes = hist["Close"].dropna()
+    closes = cast(pd.Series, hist["Close"]).dropna()
     if len(closes) < 2:
         return {"1m": None, "ytd": None, "1y": None, "5y": None}
 
     last = float(closes.iloc[-1])
-    idx = closes.index
-    now_ts = idx[-1]
+    idx = cast(pd.Index, closes.index)
+    now_ts = cast(pd.Timestamp, idx[-1])
 
     def pct_from(ts_target: pd.Timestamp) -> float | None:
         try:
-            sub = closes[closes.index <= ts_target]
+            sub = cast(pd.Series, closes[closes.index <= ts_target])
             if len(sub) == 0:
                 return None
             past = float(sub.iloc[-1])
@@ -278,12 +278,12 @@ def _symbol_period_returns_pct(sym: str) -> dict[str, float | None]:
     one_y_ago = now_ts - pd.DateOffset(years=1)
     five_y_ago = now_ts - pd.DateOffset(years=5)
 
-    ts_last = closes.index[-1]
-    if getattr(ts_last, "tz", None) is not None:
-        ytd_start = pd.Timestamp(year=ts_last.year, month=1, day=1, tz=ts_last.tz)
+    ts_last = cast(pd.Timestamp, idx[-1])
+    if getattr(ts_last, "tzinfo", None) is not None:
+        ytd_start = pd.Timestamp(year=int(ts_last.year), month=1, day=1, tz=ts_last.tzinfo)
     else:
-        ytd_start = pd.Timestamp(year=ts_last.year, month=1, day=1)
-    ytd_sub = closes[closes.index >= ytd_start]
+        ytd_start = pd.Timestamp(year=int(ts_last.year), month=1, day=1)
+    ytd_sub = cast(pd.Series, closes[closes.index >= ytd_start])
     ytd_ret: float | None = None
     if len(ytd_sub) >= 1:
         first = float(ytd_sub.iloc[0])
@@ -339,6 +339,100 @@ def portfolio_period_performance(user_id: str) -> dict[str, Any]:
     return {
         "has_positions": True,
         "periods": out,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def portfolio_equity_curve(user_id: str, period: str = "1y") -> dict[str, Any]:
+    """Portfolio market-value curve from holdings prices over time."""
+    snap = snapshot(user_id)
+    positions = [
+        p
+        for p in snap.get("positions") or []
+        if p.get("symbol") and p.get("shares") is not None and float(p.get("shares") or 0) > 0
+    ]
+    if not positions:
+        return {
+            "has_positions": False,
+            "points": [],
+            "message": "Add positions under My portfolio to see capital growth.",
+        }
+
+    try:
+        import yfinance as yf
+    except Exception:
+        return {
+            "has_positions": False,
+            "points": [],
+            "message": "yfinance unavailable.",
+        }
+
+    allowed_periods = {"3mo", "6mo", "1y", "2y", "5y"}
+    per = period if period in allowed_periods else "1y"
+
+    by_symbol: dict[str, pd.Series] = {}
+    shares_by_symbol: dict[str, float] = {}
+    for p in positions:
+        sym = str(p.get("symbol") or "").upper().strip()
+        if not sym:
+            continue
+        shares = float(p.get("shares") or 0)
+        if shares <= 0:
+            continue
+        try:
+            hist = yf.Ticker(sym).history(period=per, interval="1d", auto_adjust=True)
+        except Exception:
+            continue
+        if hist is None or hist.empty or "Close" not in hist.columns:
+            continue
+        close = cast(pd.Series, hist["Close"]).dropna()
+        if len(close) < 2:
+            continue
+        by_symbol[sym] = close
+        shares_by_symbol[sym] = shares
+
+    if not by_symbol:
+        return {
+            "has_positions": False,
+            "points": [],
+            "message": "No historical price data for current holdings.",
+        }
+
+    df = pd.DataFrame(by_symbol).sort_index().ffill()
+    value = pd.Series(0.0, index=cast(pd.Index, df.index), dtype="float64")
+    for sym, sh in shares_by_symbol.items():
+        if sym in df.columns:
+            col = cast(pd.Series, df[sym])
+            value = value + (col.astype(float) * float(sh))
+    value = value.dropna()
+    if value.empty:
+        return {
+            "has_positions": False,
+            "points": [],
+            "message": "Could not build equity curve from holdings.",
+        }
+
+    first = float(value.iloc[0]) if float(value.iloc[0]) > 0 else None
+    points: list[dict[str, Any]] = []
+    for idx, v in value.items():
+        val = float(v)
+        growth = ((val / first - 1.0) * 100.0) if first and first > 0 else None
+        ts_idx = cast(pd.Timestamp, idx)
+        date_str = ts_idx.date().isoformat()
+        points.append(
+            {
+                "date": date_str,
+                "value": round(val, 2),
+                "growth_pct": round(growth, 3) if growth is not None else None,
+            }
+        )
+
+    return {
+        "has_positions": True,
+        "period": per,
+        "points": points,
+        "start_value": round(float(value.iloc[0]), 2),
+        "end_value": round(float(value.iloc[-1]), 2),
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
 

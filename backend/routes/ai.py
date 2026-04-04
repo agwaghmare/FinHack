@@ -43,7 +43,7 @@ def ai_portfolio_analysis(user_id: str):
 
 @router.get("/holdings-coach/{user_id}")
 def ai_holdings_coach(user_id: str):
-    """LLM coaching on real holdings: education, research prompts — not trade instructions."""
+    """Mistral AI coaching on real holdings: education, research prompts — not trade instructions."""
     return real_holdings_coach(user_id)
 
 

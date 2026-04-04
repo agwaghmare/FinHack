@@ -1,5 +1,7 @@
 """Learn section — modules, quizzes, certificates (demo)."""
 
+from typing import Optional
+
 from fastapi import APIRouter
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
@@ -65,7 +67,7 @@ def certificate(user_id: str, module_id: str):
 
 @router.post("/tutor")
 def learn_tutor(body: LearnTutorIn):
-    """Ask an LLM tutor about the selected module (Gemini/OpenAI via shared AI pipeline)."""
+    """Ask the Learn tutor (Mistral AI chat)."""
     m = next((x for x in LEARN_MODULES if x["id"] == body.module_id), None)
     if not m:
         return {"error": "unknown_module", "module_id": body.module_id}
@@ -80,7 +82,7 @@ def learn_tutor(body: LearnTutorIn):
 
 
 @router.post("/audio/{module_id}")
-def learn_audio(module_id: str, body: dict | None = None):
+def learn_audio(module_id: str, body: Optional[dict] = None):
     text = (body or {}).get("text") or ""
     if not text:
         m = next((x for x in LEARN_MODULES if x["id"] == module_id), None)

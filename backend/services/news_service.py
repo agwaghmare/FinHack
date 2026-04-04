@@ -141,42 +141,50 @@ def _fetch_gnews(tickers_csv: str, max_n: int) -> list[dict]:
         return []
 
 
-def _fetch_yfinance_news(ticker: str, need: int) -> list[dict]:
+def _fetch_yfinance_news(tickers: list[str], need: int) -> list[dict]:
     if need <= 0:
-        return []
-    try:
-        t = _yf().Ticker(_yahoo_ticker(ticker))
-        news = getattr(t, "news", None) or []
-    except Exception as e:
-        logger.warning("yfinance news %s: %s", ticker, e)
         return []
 
     out: list[dict] = []
-    for item in news:
-        if not isinstance(item, dict):
+    seen_titles: set[str] = set()
+    for ticker in tickers:
+        try:
+            t = _yf().Ticker(_yahoo_ticker(ticker))
+            news = getattr(t, "news", None) or []
+        except Exception as e:
+            logger.warning("yfinance news %s: %s", ticker, e)
             continue
-        title = (item.get("title") or "").strip()
-        link = (item.get("link") or "").strip()
-        if not title:
-            continue
-        pub = ""
-        raw_pub = item.get("providerPublishTime")
-        if raw_pub is not None:
-            try:
-                pub = datetime.fromtimestamp(int(raw_pub), tz=timezone.utc).isoformat()
-            except Exception:
-                pub = str(raw_pub)
-        out.append(
-            {
-                "title": title,
-                "url": link or "#",
-                "summary": (item.get("summary") or "").strip(),
-                "source": (item.get("publisher") or "Yahoo Finance"),
-                "time_published": pub,
-                "banner_image": None,
-                "category_within_source": None,
-            }
-        )
+        for item in news:
+            if not isinstance(item, dict):
+                continue
+            title = (item.get("title") or "").strip()
+            link = (item.get("link") or "").strip()
+            if not title:
+                continue
+            tkey = title.lower()[:140]
+            if tkey in seen_titles:
+                continue
+            seen_titles.add(tkey)
+            pub = ""
+            raw_pub = item.get("providerPublishTime")
+            if raw_pub is not None:
+                try:
+                    pub = datetime.fromtimestamp(int(raw_pub), tz=timezone.utc).isoformat()
+                except Exception:
+                    pub = str(raw_pub)
+            out.append(
+                {
+                    "title": title,
+                    "url": link or "#",
+                    "summary": (item.get("summary") or "").strip(),
+                    "source": (item.get("publisher") or "Yahoo Finance"),
+                    "time_published": pub,
+                    "banner_image": None,
+                    "category_within_source": None,
+                }
+            )
+            if len(out) >= need:
+                break
         if len(out) >= need:
             break
     return out
@@ -262,8 +270,9 @@ def _lexical_sentiment(article: dict) -> None:
 def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
     tickers = _normalize_tickers_param(symbol)
     lim = int(min(max(limit, 5), 100))
-    prefer = tickers.split(",")[0].strip().upper() or "SPY"
-
+    ticker_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        ticker_list = ["SPY"]
     providers: list[str] = []
     articles: list[dict] = []
 
@@ -274,16 +283,17 @@ def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
 
     if len(articles) < lim:
         need = lim - len(articles)
-        yfn = _fetch_yfinance_news(prefer, need)
+        yfn = _fetch_yfinance_news(ticker_list, need)
         if yfn:
             articles.extend(yfn)
             providers.append("yfinance")
 
     articles = _dedupe(articles)
 
-    floor = min(lim, 10)
-    if len(articles) < floor:
-        articles.extend(_static_articles(floor - len(articles)))
+    # Only inject static placeholders if every live source failed.
+    if len(articles) == 0:
+        floor = min(lim, 6)
+        articles.extend(_static_articles(floor))
         providers.append("fallback")
 
     articles = articles[:lim]
@@ -297,7 +307,7 @@ def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
             scores.append(float(s))
     avg = sum(scores) / len(scores) if scores else 0.0
 
-    return {
+    payload = {
         "symbol": tickers,
         "avg_sentiment": round(avg, 4),
         "articles": articles,
@@ -305,6 +315,12 @@ def get_news_sentiment(symbol: str, limit: int = 30) -> dict:
         "news_providers": list(dict.fromkeys(providers)) or ["fallback"],
         "pipeline": NEWS_PIPELINE_ID,
     }
+    if providers == ["fallback"] or providers == []:
+        payload["api_message"] = (
+            "Live news feed unavailable right now. Add GNEWS_API_KEY and verify network access; "
+            "showing temporary fallback headlines."
+        )
+    return payload
 
 
 def get_multi_ticker_news(limit: int = 40) -> dict:

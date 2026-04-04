@@ -153,7 +153,10 @@ function LearnContent({ userId }: { userId: string }) {
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-500">
           Short modules and quizzes — plus an <strong className="text-zinc-700 dark:text-zinc-300">AI tutor</strong>{" "}
-          (Gemini / OpenAI when your API keys are set) to answer questions in plain language. Not investment advice.
+          powered by <strong className="text-zinc-700 dark:text-zinc-300">Mistral AI</strong>{" "}
+          (<code className="text-xs">MISTRAL_API_KEY</code>). The real-portfolio{" "}
+          <strong className="text-zinc-700 dark:text-zinc-300">AI holdings coach</strong> also uses Mistral. Insights
+          and other panels still use Gemini/OpenAI. Not investment advice.
         </p>
       </header>
 
@@ -350,9 +353,8 @@ function LearnContent({ userId }: { userId: string }) {
               <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">AI tutor</h2>
             </div>
             <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-              Ask anything about the <strong className="text-zinc-800 dark:text-zinc-200">selected module</strong>. Uses
-              your server&apos;s Gemini / OpenAI keys — same pipeline as Insights. If keys are quota-limited, it falls back
-              to safe guidance instead of breaking.
+              Ask anything about the <strong className="text-zinc-800 dark:text-zinc-200">selected module</strong>. Answers
+              come from <strong className="text-zinc-800 dark:text-zinc-200">Mistral AI</strong>.
             </p>
             {selected ? (
               <div className="mt-4 space-y-3">
@@ -368,11 +370,21 @@ function LearnContent({ userId }: { userId: string }) {
                   onChange={(e) => setTutorQuestion(e.target.value)}
                   maxLength={2000}
                 />
+                {tutorQuestion.trim().length < 3 ? (
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Type at least <strong>3 characters</strong>.
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   onClick={askTutor}
                   disabled={tutorBusy || tutorQuestion.trim().length < 3}
-                  className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-violet-500"
+                  title={
+                    tutorQuestion.trim().length < 3
+                      ? "Enter at least 3 characters in the box above"
+                      : "Send question to the AI tutor (Mistral)"
+                  }
+                  className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white hover:bg-violet-500 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-violet-600/55 disabled:text-white/90"
                 >
                   {tutorBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
                   Ask AI tutor

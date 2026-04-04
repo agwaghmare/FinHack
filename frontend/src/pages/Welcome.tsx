@@ -37,7 +37,7 @@ const tiers = [
     highlights: [
       "Gemini/OpenAI pipelines across Insights & Learn",
       "Audio briefings (ElevenLabs when configured)",
-      "Commodity lens & advanced market context",
+      "Macro regime & advanced market context",
     ],
     cta: "Go Pro",
   },

@@ -13,7 +13,6 @@ from backend.services.news_service import (
     get_news_sentiment,
 )
 from backend.services.voice_service import text_to_speech
-from backend.utils.env_keys import gemini_key
 
 logger = logging.getLogger(__name__)
 
@@ -28,6 +27,16 @@ class PodcastState:
 _close = PodcastState()
 _open = PodcastState()
 _scheduler_started = False
+
+_HARDCODED_MARKET_PARAGRAPH = (
+    "Macro update: Treasury yields and inflation-sensitive sectors remain in focus as traders parse the latest "
+    "economic prints and central-bank tone, with risk assets still reacting sharply to changes in growth and rates "
+    "expectations. Geopolitical headline watch remains active around Red Sea shipping disruptions and broader "
+    "Middle East tensions, both of which can quickly feed into energy prices, freight costs, and global risk "
+    "sentiment. Single-name spotlight: Nike's recent earnings reflected mixed consumer demand dynamics and margin "
+    "pressure from promotions in parts of the business, while management emphasized product cycles and inventory "
+    "discipline as key levers for stabilization into upcoming quarters."
+)
 
 
 def _norm_session(session: str | None) -> str:
@@ -58,6 +67,23 @@ def _one_line_story(article: dict) -> str:
     return title or "Headline unavailable."
 
 
+def _is_live_article(article: dict) -> bool:
+    src = str(article.get("source") or "").lower()
+    title = str(article.get("title") or "").lower()
+    summary = str(article.get("summary") or "").lower()
+    blob = f"{src} {title} {summary}"
+    blocked = (
+        "offline fallback",
+        "placeholder item",
+        "fallback headline",
+        "synthetic line",
+        "rate-limited",
+        "unreachable",
+        "temporary fallback",
+    )
+    return not any(k in blob for k in blocked)
+
+
 def _build_market_open_text() -> str:
     """Shorter pre-market / opening-bell style script (distinct from full close recap)."""
     date_et = datetime.now(ZoneInfo("America/New_York")).strftime("%B %d, %Y")
@@ -72,11 +98,12 @@ def _build_market_open_text() -> str:
             logger.warning("open podcast SPY news: %s", e2)
             news = {}
 
-    raw_articles = news.get("articles") or []
+    raw_articles = [a for a in (news.get("articles") or []) if _is_live_article(a)]
     buckets = _pick_categorized_stories(raw_articles)
     parts: list[str] = [
         f"Good morning. This is your market open briefing for {date_et}. "
         "Here is a fast read on macro, sectors, and the early tape.",
+        _HARDCODED_MARKET_PARAGRAPH,
     ]
     if buckets.get("macro"):
         parts.append(f"Macro: {_one_line_story(buckets['macro'][0])}")
@@ -178,7 +205,7 @@ def _build_market_close_text() -> str:
             logger.warning("fallback news sentiment fetch failed: %s", e2)
 
     avg_sentiment = float(news.get("avg_sentiment") or 0.0)
-    raw_articles = news.get("articles") or []
+    raw_articles = [a for a in (news.get("articles") or []) if _is_live_article(a)]
     buckets = _pick_categorized_stories(raw_articles)
 
     def take(bucket: str, n: int = 1) -> list[dict]:
@@ -189,6 +216,7 @@ def _build_market_close_text() -> str:
     intl_story = take("intl", 1)
     geo_story = take("geo", 1)
     stock_stories = take("stock", 4)[:2]
+    top_headlines = raw_articles[:3]
     if len(stock_stories) < 2:
         # Fill from uncategorized equity headlines (title-only bucket).
         for a in raw_articles:
@@ -203,45 +231,23 @@ def _build_market_close_text() -> str:
 
     narrative_parts: list[str] = [
         "This is your condensed market podcast, built from several headline streams.",
+        _HARDCODED_MARKET_PARAGRAPH,
     ]
     if macro_story:
         narrative_parts.append(f"Macro angle: {_one_line_story(macro_story[0])}")
-    else:
-        narrative_parts.append(
-            "Macro: no single headline dominated the feed; watch inflation and Fed guidance in the days ahead.",
-        )
     if sector_story:
         narrative_parts.append(f"Sector focus: {_one_line_story(sector_story[0])}")
-    else:
-        narrative_parts.append(
-            "Sector: leadership is rotating — check tech and financials for confirmation of risk appetite.",
-        )
     if intl_story:
         narrative_parts.append(f"International: {_one_line_story(intl_story[0])}")
-    else:
-        narrative_parts.append(
-            "International: overseas markets and currencies remain a swing factor for multinationals and exports.",
-        )
     if geo_story:
         narrative_parts.append(f"Geopolitical: {_one_line_story(geo_story[0])}")
-    else:
-        narrative_parts.append(
-            "Geopolitical: supply chains and policy headlines can move energy and defense names quickly.",
-        )
     stock_lines = 0
     for i, a in enumerate(stock_stories[:2]):
         label = "Earnings and single-name" if i == 0 else "Another name to watch"
         narrative_parts.append(f"{label}: {_one_line_story(a)}")
         stock_lines += 1
-    if stock_lines < 2:
-        fallbacks = [
-            "Company tape: watch earnings quality, margins, and guidance — not just the headline beat.",
-            "Second read: revisions to forward estimates often matter more than a single quarter's surprise.",
-        ]
-        for j in range(stock_lines, 2):
-            narrative_parts.append(fallbacks[j - stock_lines])
-
-    top_headlines = raw_articles[:3]
+    if stock_lines == 0 and top_headlines:
+        narrative_parts.append(f"Single-name context: {_one_line_story(top_headlines[0])}")
 
     # Commodities & crypto quick mention.
     wti = by_symbol.get("WTI")
@@ -313,32 +319,6 @@ def _build_market_close_text() -> str:
         "For the next session, watch how leadership names confirm strength or weakness, "
         "and treat large swings as signal for risk control, not a guarantee of trend."
     )
-
-    # Optionally polish with Gemini if key exists (voice will still work without it).
-    if gemini_key():
-        try:
-            # Keep it simple and robust; do not exceed typical model limits.
-            from backend.services.ai_service import generate_insight
-
-            payload = {
-                "market_close": {
-                    "date_et": date_et,
-                    "macro": macro,
-                    "podcast_narrative_segments": narrative_parts,
-                    "movers": {
-                        "risers": [q for q in risers],
-                        "fallers": [q for q in fallers],
-                    },
-                    "leaders": leaders,
-                    "sentiment": {"avg_sentiment": avg_sentiment, "label": sentiment_label, "headlines": top_headlines},
-                    "commodities_crypto": {"wti": wti, "btc": btc, "eth": eth},
-                }
-            }
-            polished = generate_insight(payload).get("insight") or ""
-            if isinstance(polished, str) and polished.strip():
-                return polished.strip()[:1400]
-        except Exception as e:
-            logger.warning("Gemini polishing failed: %s", e)
 
     # Fallback: deterministic script (multi-article narrative + tape + sentiment).
     narrative = " ".join(narrative_parts)

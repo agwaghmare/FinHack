@@ -1,4 +1,4 @@
-"""FinSight chatbot: local LLM (Ollama) first, Gemini optional fallback."""
+"""FinSight chatbot via Gemini (optional OpenAI-style fallbacks live in other routes)."""
 
 from __future__ import annotations
 
@@ -18,8 +18,6 @@ _FALLBACK_MODELS = (
 )
 
 _configured_key: str | None = None
-_LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "llama3.2")
-_LOCAL_LLM_URL = os.getenv("LOCAL_LLM_URL", "http://127.0.0.1:11434/api/generate")
 
 
 def _ensure_configured() -> bool:
@@ -38,29 +36,6 @@ def _ensure_configured() -> bool:
     return True
 
 
-def _ask_local(question: str) -> str | None:
-    try:
-        import httpx
-
-        r = httpx.post(
-            _LOCAL_LLM_URL,
-            json={
-                "model": _LOCAL_LLM_MODEL,
-                "prompt": question,
-                "stream": False,
-                "options": {"temperature": 0.35},
-            },
-            timeout=90.0,
-        )
-        r.raise_for_status()
-        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
-        text = str(data.get("response") or "").strip()
-        return text or None
-    except Exception as e:
-        logger.info("Local chat LLM unavailable (%s): %s", _LOCAL_LLM_MODEL, e)
-        return None
-
-
 def ask_chatbot(question: str) -> dict:
     """
     Ask the Gemini chatbot a question.
@@ -72,15 +47,12 @@ def ask_chatbot(question: str) -> dict:
         return {"error": "Question cannot be empty"}
 
     q = str(question).strip()
-    local = _ask_local(q)
-    if local:
-        return {"reply": local}
 
     if not _ensure_configured():
         return {
             "error": (
-                "Local LLM unavailable and Gemini not configured. "
-                "Start Ollama (`ollama run llama3.2`) or set GEMINI_API_KEY."
+                "Gemini is not configured. Set GEMINI_API_KEY or GOOGLE_API_KEY in the API .env "
+                "(repo root, next to app.py) and restart the server."
             ),
         }
 

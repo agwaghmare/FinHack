@@ -52,7 +52,8 @@ export default function App() {
             <Route path="pulse" element={<Market />} />
             <Route path="portfolio" element={<RealPortfolio />} />
             <Route path="paper-lab" element={<PaperTrading />} />
-            <Route path="commodities" element={<CommodityLens />} />
+            <Route path="macro-regime" element={<CommodityLens />} />
+            <Route path="commodities" element={<Navigate to="/macro-regime" replace />} />
             <Route path="insights" element={<Insights />} />
             <Route path="ai" element={<Navigate to="/insights" replace />} />
             <Route path="learn" element={<Learn />} />

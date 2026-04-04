@@ -80,7 +80,16 @@ export function ClerkAuthRoot({ children }: { children: ReactNode }) {
 
 export function ClerkSignInPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4">
+      <div className="max-w-xl text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400/90">FutureSight</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-100">
+          Build your future with us
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          Start investing early and secure your future with FutureSight.
+        </p>
+      </div>
       <SignIn
         routing="path"
         path="/sign-in"
@@ -94,7 +103,16 @@ export function ClerkSignInPage() {
 
 export function ClerkSignUpPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-zinc-950 px-4">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4">
+      <div className="max-w-xl text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400/90">FutureSight</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-100">
+          Build your future with us
+        </h1>
+        <p className="mt-2 text-sm text-zinc-400">
+          Start investing early and secure your future with FutureSight.
+        </p>
+      </div>
       <SignUp
         routing="path"
         path="/sign-up"

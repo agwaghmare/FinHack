@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from backend.services.holdings_service import (
     add_or_merge_position,
     delete_position,
+    portfolio_equity_curve,
     portfolio_period_performance,
     snapshot,
 )
@@ -36,6 +37,12 @@ def holdings_snapshot(user_id: str):
 def holdings_performance(user_id: str):
     """Weighted total return % (1M, YTD, 1Y, 5Y) from adjusted closes."""
     return portfolio_period_performance(user_id)
+
+
+@router.get("/holdings/{user_id}/equity-curve")
+def holdings_equity_curve(user_id: str, period: str = "1y"):
+    """Portfolio capital-growth curve from holdings."""
+    return portfolio_equity_curve(user_id, period=period)
 
 
 @router.post("/holdings/{user_id}")

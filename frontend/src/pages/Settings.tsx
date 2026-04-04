@@ -11,6 +11,7 @@ type Health = {
   news_pipeline?: string;
   market_cross_asset?: boolean;
   ai_explain?: boolean;
+  mistral_key_loaded?: boolean;
 };
 
 const NOTIF_KEY = "finsight_notification_prefs_v1";
@@ -307,6 +308,7 @@ export function Settings() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Badge ok={!!s.gnews} label="GNews" />
           <Badge ok={!!s.openai} label="OpenAI" />
+          <Badge ok={!!s.mistral} label="Mistral" />
           <Badge ok={!!s.fred} label="FRED" />
           <Badge ok={!!s.gemini} label="Gemini" />
           <Badge ok={!!s.elevenlabs} label="ElevenLabs" />
@@ -340,7 +342,7 @@ export function Settings() {
             VITE_API_URL
           </code>{" "}
           in <code className="text-xs">frontend/.env</code> (default{" "}
-          <code className="text-xs">http://127.0.0.1:8001</code>). Restart{" "}
+          <code className="text-xs">http://127.0.0.1:8000</code>). Restart{" "}
           <code className="text-xs">npm run dev</code> after edits.
         </p>
         <p className="mt-3 text-sm text-zinc-600 dark:text-zinc-400">
