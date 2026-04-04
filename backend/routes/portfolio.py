@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from backend.services.portfolio_service import analyze_portfolio
+from backend.services.regime_service import detect_regime
 
 from backend.services.holdings_service import (
     add_or_merge_position,
@@ -11,7 +12,14 @@ from backend.services.holdings_service import (
 )
 from backend.services.portfolio_service import analyze_portfolio
 
+
+
+
 router = APIRouter()
+
+@router.get("/regime")
+def market_regime():
+    return detect_regime()
 
 @router.get("/analyze/{user_id}")
 def analyze(user_id: str):

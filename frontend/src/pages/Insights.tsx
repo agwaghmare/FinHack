@@ -648,40 +648,158 @@ function InsightsContent({ userId }: { userId: string }) {
       {/* ── Insight Panels ── */}
       <div className="grid gap-6 lg:grid-cols-3">
         {sections.map(({ key, title, text, placeholder }) => (
-          <div key={key} className="glass rounded-2xl p-6">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
+  <div key={key} className="glass rounded-2xl p-6">
+    <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
 
-            {/* Portfolio risk score UI */}
-            {key === "portfolio" && portfolio?.risk_score != null && (
-              <div className="mt-4 space-y-3">
-                <RiskBar score={portfolio.risk_score} label={portfolio.risk_label ?? "Unknown"} />
-                <div className="mt-3 space-y-1.5">
-                  {(portfolio.positions ?? []).map((pos) => (
-                    <PositionRiskRow key={pos.symbol} pos={pos} />
-                  ))}
-                </div>
-              </div>
-            )}
+    {/* Portfolio risk score UI */}
+    {key === "portfolio" && portfolio?.risk_score != null && (
+      <div className="mt-4 space-y-3">
+        <RiskBar score={portfolio.risk_score} label={portfolio.risk_label ?? "Unknown"} />
+        <div className="mt-3 space-y-1.5">
+          {(portfolio.positions ?? []).map((pos) => (
+            <PositionRiskRow key={pos.symbol} pos={pos} />
+          ))}
+        </div>
+      </div>
+    )}
 
-            {key === "portfolio" && portfolio?.risk_score == null && (
-              <p className="mt-4 text-sm text-zinc-500">Add positions to see your risk score.</p>
-            )}
+    {key === "portfolio" && portfolio?.risk_score == null && (
+      <p className="mt-4 text-sm text-zinc-500">Add positions to see your risk score.</p>
+    )}
 
-            {key !== "portfolio" && placeholder && (
-              <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-200">
-                <Sparkles className="h-3.5 w-3.5" />
-                {integrations?.gemini === false ? "Setup: add API key" : "Demo mode"}
-              </div>
-            )}
+    {key !== "portfolio" && placeholder && (
+      <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-200">
+        <Sparkles className="h-3.5 w-3.5" />
+        {integrations?.gemini === false ? "Setup: add API key" : "Demo mode"}
+      </div>
+    )}
 
-            {text ? (
-              <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-                {text}
-              </p>
-            ) : null}
+    {key === "strategy" && typeof strategy === "object" && strategy && "regime" in strategy && (
+  <div className="mt-4 space-y-3">
+    {/* Regime badge */}
+    <div className="flex items-center justify-between">
+      <span className="text-[10px] text-zinc-500 uppercase tracking-wide">Market Regime</span>
+      <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+        (strategy as { regime?: string }).regime === "Bull"
+          ? "bg-emerald-400/10 text-emerald-400 border border-emerald-400/30"
+          : (strategy as { regime?: string }).regime === "Bear"
+            ? "bg-rose-400/10 text-rose-400 border border-rose-400/30"
+            : "bg-yellow-400/10 text-yellow-400 border border-yellow-400/30"
+      }`}>
+        {(strategy as { regime?: string }).regime} · {(strategy as { confidence_pct?: number }).confidence_pct}% confidence
+      </span>
+    </div>
+
+    {/* Narrative */}
+    {(strategy as { narrative?: string }).narrative && (
+      <p className="text-xs text-zinc-400 leading-relaxed">
+        {(strategy as { narrative?: string }).narrative}
+      </p>
+    )}
+
+    {/* Regime last 30d */}
+    {(strategy as { regime_last_30d?: Record<string, number> }).regime_last_30d && (
+      <div className="flex gap-3 text-[10px]">
+        {Object.entries((strategy as { regime_last_30d?: Record<string, number> }).regime_last_30d ?? {}).map(([label, days]) => (
+          <div key={label} className="flex items-center gap-1">
+            <span className={`font-semibold ${
+              label === "Bull" ? "text-emerald-400" :
+              label === "Bear" ? "text-rose-400" : "text-yellow-400"
+            }`}>{label}</span>
+            <span className="text-zinc-500">{days}d</span>
           </div>
         ))}
       </div>
+    )}
+
+    {/* Macro pills */}
+    <div className="flex flex-wrap gap-2 text-[10px]">
+      {(strategy as { fed_rate?: number }).fed_rate != null && (
+        <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
+          Fed {(strategy as { fed_rate?: number }).fed_rate}%
+        </span>
+      )}
+      {(strategy as { cpi?: number }).cpi != null && (
+        <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
+          CPI {(strategy as { cpi?: number }).cpi}
+        </span>
+      )}
+      {(strategy as { unemployment?: number }).unemployment != null && (
+        <span className="rounded-full border border-zinc-700 px-2 py-0.5 text-zinc-400">
+          Unemployment {(strategy as { unemployment?: number }).unemployment}%
+        </span>
+      )}
+    </div>
+
+    <div className="h-px bg-zinc-800" />
+  </div>
+)}
+
+    {text ? <FormattedInsight text={text} /> : null}
+  </div>
+))}
+      </div>
+    </div>
+  );
+}
+
+function FormattedInsight({ text }: { text: string }) {
+  // Split into lines and clean markdown
+  const lines = text.split("\n").filter(Boolean);
+
+  return (
+    <div className="mt-4 space-y-3">
+      {lines.map((line, i) => {
+        // Clean all asterisks for bold/italic markdown
+        const clean = line
+          .replace(/\*\*(.+?)\*\*/g, "$1")
+          .replace(/\*(.+?)\*/g, "$1")
+          .trim();
+
+        // Section headers like "TOP THEMES", "SENTIMENT BALANCE" etc
+        const isHeader = /^(TOP THEMES|SENTIMENT BALANCE|MACRO IMPACT|SO WHAT|\d+\.\s+[A-Z])/i.test(clean);
+
+        // Bullet points
+        const isBullet = /^[-•]\s/.test(clean);
+        const bulletText = isBullet ? clean.replace(/^[-•]\s/, "") : clean;
+
+        // Numbered items like "1. something"
+        const isNumbered = /^\d+\.\s/.test(clean);
+
+        if (isHeader) {
+          return (
+            <p key={i} className="text-[11px] font-semibold uppercase tracking-widest text-blue-400 mt-4 first:mt-0">
+              {clean.replace(/^\d+\.\s/, "")}
+            </p>
+          );
+        }
+
+        if (isBullet) {
+          return (
+            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
+              <span className="text-blue-400 shrink-0 mt-0.5">·</span>
+              <span>{bulletText}</span>
+            </div>
+          );
+        }
+
+        if (isNumbered) {
+          const num = clean.match(/^(\d+)\./)?.[1];
+          const rest = clean.replace(/^\d+\.\s/, "");
+          return (
+            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
+              <span className="text-blue-400 font-semibold shrink-0">{num}.</span>
+              <span>{rest}</span>
+            </div>
+          );
+        }
+
+        return (
+          <p key={i} className="text-sm leading-relaxed text-zinc-400">
+            {clean}
+          </p>
+        );
+      })}
     </div>
   );
 }
