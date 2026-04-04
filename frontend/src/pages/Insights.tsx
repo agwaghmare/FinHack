@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mic, Newspaper, Sparkles } from "lucide-react";
+import { Loader2, Mic, Newspaper, Sparkles, TrendingUp } from "lucide-react";
 import { api, postAiAudioSummary } from "../lib/api";
 import { ClerkUserGate } from "../components/ClerkUserGate";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
+
 
 const DEMO_SENTENCE =
   "Demo mode: set GEMINI_API_KEY or OPENAI_API_KEY for live summaries. This is placeholder insight text for the hackathon UI.";
@@ -20,7 +21,7 @@ type CrossAssetPayload = {
   quotes?: { symbol?: string; change_percent?: string }[];
 };
 
-/** Matches current and older API demo strings so panels don’t show raw placeholder text. */
+/** Matches current and older API demo strings so panels don't show raw placeholder text. */
 function isBackendDemoInsight(text: string): boolean {
   if (text.includes(DEMO_SENTENCE)) return true;
   if (text.includes("Demo mode: set GEMINI_API_KEY for live Gemini summaries")) return true;
@@ -67,7 +68,7 @@ What you can do now (no API key):
 - List your largest positions and ask whether any single name is >20–25% of equity
 - Match each holding to a risk bucket: growth, value, defensive, speculative
 - Write down one rule: max loss per trade or max sector weight you will accept
-- Open Insights → “Chain reactions” to practice second-order thinking (e.g. oil ↔ ethanol ↔ row crops)
+- Open Insights → "Chain reactions" to practice second-order thinking (e.g. oil ↔ ethanol ↔ row crops)
 
 To enable live output, add GEMINI_API_KEY or OPENAI_API_KEY in your API .env and refresh.`;
   }
@@ -78,7 +79,7 @@ What this section will show with Gemini enabled:
 - Top market themes from the latest headlines (rates, earnings, AI, energy)
 - Bullish vs bearish sentiment balance with confidence-style language
 - Plain-English impact on growth, rates, and volatility expectations
-- “So what?” lines tying headlines to portfolio sectors you hold
+- "So what?" lines tying headlines to portfolio sectors you hold
 
 What you can do now:
 - Scan headlines for words that move your sectors (semis, banks, consumer)
@@ -93,14 +94,34 @@ What this section will show with Gemini enabled:
 - Risk-aware trade adjustments and sizing ideas (half-size, scale-in, time stops)
 - Entry and exit discipline reminders (plans vs impulses)
 - Position-level actions to reduce downside exposure (hedges, trims, correlation)
-- Scenario prompts: “If the index drops 5%, what do I do first?”
+- Scenario prompts: "If the index drops 5%, what do I do first?"
 
 What you can do now:
 - Define max position size as a % of portfolio before the next trade
-- For each open idea, write invalidation: “I exit if ___”
+- For each open idea, write invalidation: "I exit if ___"
 - Re-read your last 3 trades: were they process-driven or emotion-driven?
 
 To enable live output, add GEMINI_API_KEY or OPENAI_API_KEY in your API .env and refresh.`;
+}
+
+function SentimentBadge({ label }: { label?: string }) {
+  if (!label) return null;
+  const lower = label.toLowerCase();
+  const isBull = lower.includes("bull");
+  const isBear = lower.includes("bear");
+  return (
+    <span
+      className={`text-[10px] font-semibold uppercase tracking-wide ${
+        isBull
+          ? "text-emerald-400"
+          : isBear
+            ? "text-rose-400"
+            : "text-zinc-500"
+      }`}
+    >
+      {label}
+    </span>
+  );
 }
 
 function InsightsContent({ userId }: { userId: string }) {
@@ -126,6 +147,10 @@ function InsightsContent({ userId }: { userId: string }) {
   const [newsErr, setNewsErr] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<{ gemini?: boolean } | null>(null);
   const [heldSymbols, setHeldSymbols] = useState<string[]>([]);
+
+  // Holdings news state
+  const [holdingsNews, setHoldingsNews] = useState<Record<string, AvArticle[]>>({});
+  const [holdingsNewsLoading, setHoldingsNewsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -175,6 +200,36 @@ function InsightsContent({ userId }: { userId: string }) {
       cancelled = true;
     };
   }, [userId]);
+
+  // Fetch news per held ticker
+  useEffect(() => {
+    if (heldSymbols.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      setHoldingsNewsLoading(true);
+      const results: Record<string, AvArticle[]> = {};
+      await Promise.all(
+  heldSymbols.slice(0, 6).map(async (ticker) => {
+    try {
+      const r = await api.marketNews(ticker, 5) as { articles?: AvArticle[] };
+      if (!cancelled) results[ticker] = r.articles?.slice(0, 3) ?? [];
+    } catch (e) {
+      console.error(`Error fetching news for ${ticker}:`, e);
+      if (!cancelled) results[ticker] = [];
+    }
+  })
+);
+      if (!cancelled) {
+        setHoldingsNews(results);
+        setHoldingsNewsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [heldSymbols]);
+
+  
 
   useEffect(() => {
     let ax = false;
@@ -294,6 +349,96 @@ function InsightsContent({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-8">
+
+      {/* ── Holdings News Section ── */}
+      <section className="glass rounded-2xl border border-blue-500/20 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-blue-400" />
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
+              News for your positions
+            </h2>
+            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-300">
+              Live
+            </span>
+          </div>
+          {heldSymbols.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {heldSymbols.map((t) => (
+                <span
+                  key={t}
+                  className="rounded-full border border-zinc-700 bg-zinc-800/60 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-300"
+                >
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {holdingsNewsLoading && (
+          <div className="flex items-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Fetching headlines for your holdings…
+          </div>
+        )}
+
+        {!holdingsNewsLoading && heldSymbols.length === 0 && (
+          <p className="text-sm text-zinc-500">
+            No holdings found. Add positions to see relevant headlines here.
+          </p>
+        )}
+
+        {!holdingsNewsLoading && heldSymbols.length > 0 && (
+          <div className="space-y-7">
+            {heldSymbols.slice(0, 6).map((ticker) => {
+              const articles = holdingsNews[ticker] ?? [];
+              return (
+                <div key={ticker}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-blue-400">
+                      {ticker}
+                    </span>
+                    <div className="h-px flex-1 bg-zinc-800" />
+                  </div>
+                  {articles.length === 0 ? (
+                    <p className="text-xs text-zinc-500">No headlines found for {ticker}.</p>
+                  ) : (
+                    <ul className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      {articles.map((a, i) => (
+                        <li
+                          key={`${a.url ?? i}-${i}`}
+                          className="flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3"
+                        >
+                          <a
+                            href={a.url ?? "#"}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="line-clamp-3 text-sm font-medium leading-snug text-zinc-100 hover:underline underline-offset-2"
+                          >
+                            {a.title ?? "Untitled"}
+                          </a>
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-zinc-500 mt-auto">
+                            {a.source && <span className="truncate">{a.source}</span>}
+                            {a.time_published && (
+                              <span className="tabular-nums shrink-0">
+                                {a.time_published.slice(0, 10)}
+                              </span>
+                            )}
+                            <SentimentBadge label={a.overall_sentiment_label} />
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Chain Reactions Section ── */}
       <section className="glass rounded-2xl border border-amber-500/20 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -358,6 +503,7 @@ function InsightsContent({ userId }: { userId: string }) {
         )}
       </section>
 
+      {/* ── Page Header ── */}
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
@@ -388,6 +534,7 @@ function InsightsContent({ userId }: { userId: string }) {
         </button>
       </header>
 
+      {/* ── Market News Feed ── */}
       <section className="glass rounded-2xl p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -483,17 +630,7 @@ function InsightsContent({ userId }: { userId: string }) {
                   </div>
                   {a.overall_sentiment_label ? (
                     <div className="flex w-20 shrink-0 flex-col items-end justify-start border-l border-zinc-800/80 pl-2 sm:w-24 sm:pl-3">
-                      <span
-                        className={`max-w-full text-right text-[10px] font-semibold uppercase leading-tight tracking-wide ${
-                          (a.overall_sentiment_label ?? "").toLowerCase().includes("bull")
-                            ? "text-emerald-500 dark:text-emerald-400"
-                            : (a.overall_sentiment_label ?? "").toLowerCase().includes("bear")
-                              ? "text-rose-500 dark:text-rose-400"
-                              : "text-zinc-500 dark:text-zinc-400"
-                        }`}
-                      >
-                        {a.overall_sentiment_label}
-                      </span>
+                      <SentimentBadge label={a.overall_sentiment_label} />
                     </div>
                   ) : null}
                 </li>
