@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
-import { BookOpen, ExternalLink, Loader2, Mic, Trophy } from "lucide-react";
+import { BookOpen, ExternalLink, Loader2, Mic, Sparkles, Trophy } from "lucide-react";
 import { api, postLearnModuleAudio } from "../lib/api";
 import { ClerkUserGate } from "../components/ClerkUserGate";
 
@@ -47,6 +47,10 @@ function LearnContent({ userId }: { userId: string }) {
   const [cert, setCert] = useState<unknown>(null);
   const [loading, setLoading] = useState(true);
   const [audioBusy, setAudioBusy] = useState<string | null>(null);
+  const [tutorQuestion, setTutorQuestion] = useState("");
+  const [tutorReply, setTutorReply] = useState<string | null>(null);
+  const [tutorBusy, setTutorBusy] = useState(false);
+  const [tutorErr, setTutorErr] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -71,6 +75,12 @@ function LearnContent({ userId }: { userId: string }) {
         setAnswers(Array.from({ length: n }, () => 0));
       },
     );
+  }, [selected]);
+
+  useEffect(() => {
+    setTutorReply(null);
+    setTutorErr(null);
+    setTutorQuestion("");
   }, [selected]);
 
   useEffect(() => {
@@ -114,6 +124,24 @@ function LearnContent({ userId }: { userId: string }) {
     }
   }
 
+  async function askTutor() {
+    if (!selected || tutorQuestion.trim().length < 3) return;
+    setTutorBusy(true);
+    setTutorErr(null);
+    try {
+      const r = (await api.learnTutor(selected, tutorQuestion.trim())) as {
+        reply?: string;
+        error?: string;
+      };
+      if (r.error) setTutorErr(String(r.error));
+      else setTutorReply((r.reply ?? "").trim() || "No response text returned.");
+    } catch (e) {
+      setTutorErr(e instanceof Error ? e.message : "Tutor request failed");
+    } finally {
+      setTutorBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-8">
       <header>
@@ -121,12 +149,27 @@ function LearnContent({ userId }: { userId: string }) {
           Learn
         </p>
         <h1 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">
-          Modules & quizzes
+          Financial education & inclusion
         </h1>
         <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-          Learn with short modules, quick quizzes, and simple certificates.
+          Short modules and quizzes — plus an <strong className="text-zinc-700 dark:text-zinc-300">AI tutor</strong>{" "}
+          (Gemini / OpenAI when your API keys are set) to answer questions in plain language. Not investment advice.
         </p>
       </header>
+
+      <section
+        id="mission"
+        className="scroll-mt-24 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 px-5 py-4 dark:border-emerald-500/20 dark:bg-emerald-950/20"
+      >
+        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+          Hackathon alignment
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+          FinSight uses AI for <strong>trustworthy education</strong> (explainers, tutor, “why this matters”) and for{" "}
+          <strong>research & portfolio support</strong> (headline summaries, strategy framing, holdings coach) — with
+          clear limits: no personalized trade instructions; human oversight and professional advice still matter.
+        </p>
+      </section>
 
       <section className="glass rounded-2xl p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Videos to watch</h2>
@@ -298,6 +341,54 @@ function LearnContent({ userId }: { userId: string }) {
               </div>
             ) : (
               <p className="mt-4 text-sm text-zinc-500">Select a module to begin.</p>
+            )}
+          </div>
+
+          <div className="glass rounded-2xl border border-violet-500/20 p-6 dark:border-violet-500/15">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-violet-400" />
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">AI tutor</h2>
+            </div>
+            <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+              Ask anything about the <strong className="text-zinc-800 dark:text-zinc-200">selected module</strong>. Uses
+              your server&apos;s Gemini / OpenAI keys — same pipeline as Insights. If keys are quota-limited, it falls back
+              to safe guidance instead of breaking.
+            </p>
+            {selected ? (
+              <div className="mt-4 space-y-3">
+                <label className="sr-only" htmlFor="learn-tutor-q">
+                  Your question
+                </label>
+                <textarea
+                  id="learn-tutor-q"
+                  rows={3}
+                  className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+                  placeholder='e.g. "What is liquidity in one sentence?" or "Why do ETFs matter for beginners?"'
+                  value={tutorQuestion}
+                  onChange={(e) => setTutorQuestion(e.target.value)}
+                  maxLength={2000}
+                />
+                <button
+                  type="button"
+                  onClick={askTutor}
+                  disabled={tutorBusy || tutorQuestion.trim().length < 3}
+                  className="inline-flex items-center gap-2 rounded-full bg-violet-600 px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 hover:bg-violet-500"
+                >
+                  {tutorBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />}
+                  Ask AI tutor
+                </button>
+                {tutorErr && (
+                  <p className="text-sm text-amber-700 dark:text-amber-300">{tutorErr}</p>
+                )}
+                {tutorReply && (
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 text-sm leading-relaxed text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900/60 dark:text-zinc-200">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Answer</p>
+                    <p className="mt-2 whitespace-pre-wrap">{tutorReply}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="mt-4 text-sm text-zinc-500">Select a module to unlock the tutor.</p>
             )}
           </div>
 

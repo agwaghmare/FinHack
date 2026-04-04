@@ -118,9 +118,15 @@ export const api = {
     }),
   aiPortfolioAnalysis: (userId: string) =>
     j(`/ai/portfolio-analysis/${encodeURIComponent(userId)}`),
-  aiNewsSummary: () => j("/ai/news-summary"),
+  aiNewsSummary: (userId?: string) =>
+    userId
+      ? j(`/ai/news-summary?user_id=${encodeURIComponent(userId)}`)
+      : j("/ai/news-summary"),
   aiStrategy: (userId: string) =>
     j(`/ai/strategy-suggestions/${encodeURIComponent(userId)}`),
+  /** Real holdings: AI education / research framing (not trade advice). */
+  aiHoldingsCoach: (userId: string) =>
+    j(`/ai/holdings-coach/${encodeURIComponent(userId)}`),
   explainWhy: (context: Record<string, unknown>) =>
     j("/ai/explain", {
       method: "POST",
@@ -156,6 +162,12 @@ export const api = {
     j(
       `/learn/certificate/${encodeURIComponent(userId)}/${encodeURIComponent(moduleId)}`,
     ),
+  /** Module-scoped LLM tutor (financial education; uses Gemini/OpenAI when configured). */
+  learnTutor: (moduleId: string, question: string) =>
+    j("/learn/tutor", {
+      method: "POST",
+      body: JSON.stringify({ module_id: moduleId, question }),
+    }),
   clerkConfig: () => j<{ publishable_key?: string }>("/auth/clerk-config"),
   integrationStatus: () =>
     j<Record<string, boolean>>("/auth/integration-status"),

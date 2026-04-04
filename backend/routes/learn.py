@@ -4,11 +4,18 @@ from typing import Optional
 
 from fastapi import APIRouter
 from fastapi.responses import Response
+from pydantic import BaseModel, Field
 
 from backend.data.learn_modules import LEARN_MODULES, QUIZZES
+from backend.services.ai_extended_service import learn_tutor_reply
 from backend.services.voice_service import text_to_speech
 
 router = APIRouter()
+
+
+class LearnTutorIn(BaseModel):
+    module_id: str = Field(..., min_length=1, max_length=64)
+    question: str = Field(..., min_length=3, max_length=2000)
 
 
 @router.get("/modules")
@@ -56,6 +63,22 @@ def certificate(user_id: str, module_id: str):
         "credential": f"cert-{module_id}-{user_id[:8]}",
         "message": "Demo certificate — complete quiz with score ≥ 60 for full unlock.",
     }
+
+
+@router.post("/tutor")
+def learn_tutor(body: LearnTutorIn):
+    """Ask an LLM tutor about the selected module (Gemini/OpenAI via shared AI pipeline)."""
+    m = next((x for x in LEARN_MODULES if x["id"] == body.module_id), None)
+    if not m:
+        return {"error": "unknown_module", "module_id": body.module_id}
+    raw_topics = m.get("topics")
+    topics = [str(t) for t in raw_topics] if isinstance(raw_topics, list) else []
+    return learn_tutor_reply(
+        str(m.get("title") or body.module_id),
+        str(m.get("summary") or ""),
+        topics,
+        body.question,
+    )
 
 
 @router.post("/audio/{module_id}")

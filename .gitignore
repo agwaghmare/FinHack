@@ -3,10 +3,18 @@
 .env.*
 !.env.example
 
+# Python
 .venv/
 venv/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Node / Vite
 frontend/node_modules/
 frontend/dist/
-__pycache__/
-*.pyc
+
+# Local sandbox / runtime data (from archit)
+backend/data/holdings_store.json
+
 .DS_Store

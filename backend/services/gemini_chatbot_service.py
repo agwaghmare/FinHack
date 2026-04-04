@@ -1,11 +1,9 @@
-"""FinSight chatbot via google.generativeai (Gemini). Uses GEMINI_API_KEY / GOOGLE_API_KEY from env."""
+"""FinSight chatbot: local LLM (Ollama) first, Gemini optional fallback."""
 
 from __future__ import annotations
 
 import logging
 import os
-
-import google.generativeai as genai
 
 from backend.utils.env_keys import gemini_key
 
@@ -20,9 +18,16 @@ _FALLBACK_MODELS = (
 )
 
 _configured_key: str | None = None
+_LOCAL_LLM_MODEL = os.getenv("LOCAL_LLM_MODEL", "llama3.2")
+_LOCAL_LLM_URL = os.getenv("LOCAL_LLM_URL", "http://127.0.0.1:11434/api/generate")
 
 
 def _ensure_configured() -> bool:
+    try:
+        import google.generativeai as genai  # type: ignore
+    except Exception:
+        return False
+
     global _configured_key
     api_key = gemini_key()
     if not api_key:
@@ -31,6 +36,29 @@ def _ensure_configured() -> bool:
         genai.configure(api_key=api_key)
         _configured_key = api_key
     return True
+
+
+def _ask_local(question: str) -> str | None:
+    try:
+        import httpx
+
+        r = httpx.post(
+            _LOCAL_LLM_URL,
+            json={
+                "model": _LOCAL_LLM_MODEL,
+                "prompt": question,
+                "stream": False,
+                "options": {"temperature": 0.35},
+            },
+            timeout=90.0,
+        )
+        r.raise_for_status()
+        data = r.json() if r.headers.get("content-type", "").startswith("application/json") else {}
+        text = str(data.get("response") or "").strip()
+        return text or None
+    except Exception as e:
+        logger.info("Local chat LLM unavailable (%s): %s", _LOCAL_LLM_MODEL, e)
+        return None
 
 
 def ask_chatbot(question: str) -> dict:
@@ -43,12 +71,21 @@ def ask_chatbot(question: str) -> dict:
     if not question or not str(question).strip():
         return {"error": "Question cannot be empty"}
 
+    q = str(question).strip()
+    local = _ask_local(q)
+    if local:
+        return {"reply": local}
+
     if not _ensure_configured():
         return {
-            "error": "Missing GEMINI_API_KEY (or GOOGLE_API_KEY / GENAI aliases) in API environment.",
+            "error": (
+                "Local LLM unavailable and Gemini not configured. "
+                "Start Ollama (`ollama run llama3.2`) or set GEMINI_API_KEY."
+            ),
         }
 
-    q = str(question).strip()
+    import google.generativeai as genai  # type: ignore
+
     models_to_try: list[str] = []
     if _DEFAULT_MODEL not in _FALLBACK_MODELS:
         models_to_try.append(_DEFAULT_MODEL)
