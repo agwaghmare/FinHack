@@ -173,6 +173,23 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ module_id: moduleId, question }),
     }),
+  learnCommunityRiskPreview: (userId: string) =>
+    j(`/learn/community/risk-preview/${encodeURIComponent(userId)}`),
+  learnCommunityPosts: () => j("/learn/community/posts"),
+  learnCommunityCreatePost: (
+    userId: string,
+    title: string,
+    body: string,
+  ) =>
+    j("/learn/community/posts", {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, title, body }),
+    }),
+  learnCommunityReply: (userId: string, postId: string, body: string) =>
+    j(`/learn/community/posts/${encodeURIComponent(postId)}/reply`, {
+      method: "POST",
+      body: JSON.stringify({ user_id: userId, body }),
+    }),
   clerkConfig: () => j<{ publishable_key?: string }>("/auth/clerk-config"),
   integrationStatus: () =>
     j<Record<string, boolean>>("/auth/integration-status"),

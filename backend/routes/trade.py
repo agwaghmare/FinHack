@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 from backend.services import sandbox_store
 from backend.services.ai_extended_service import trade_feedback as trade_feedback_ai
 from backend.services.alpaca_service import get_account, get_positions, has_alpaca, place_order
+from backend.services.clerk_service import leaderboard_display_label
 from backend.services.market_service import last_trade_price
 
 router = APIRouter()
@@ -68,7 +69,15 @@ def trade_sell(body: TradeBody) -> dict[str, Any]:
 
 @router.get("/leaderboard")
 def leaderboard() -> dict[str, Any]:
-    return {"rows": sandbox_store.get_leaderboard()}
+    rows = sandbox_store.get_leaderboard()
+    out = [
+        {
+            **r,
+            "display_label": leaderboard_display_label(str(r.get("user_id") or "")),
+        }
+        for r in rows
+    ]
+    return {"rows": out}
 
 
 @router.get("/ai-feedback/{user_id}")

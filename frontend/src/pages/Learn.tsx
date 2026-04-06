@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
 import { useLocation } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
-import { BookOpen, ExternalLink, Loader2, Mic, Sparkles, Trophy } from "lucide-react";
+import {
+  BookOpen,
+  ExternalLink,
+  Loader2,
+  MessageCircle,
+  Mic,
+  Send,
+  Sparkles,
+  Trophy,
+  Users,
+} from "lucide-react";
 import { api, postLearnModuleAudio } from "../lib/api";
 import { loadCertificates, saveCertificateRecord, type StoredCertificate } from "../lib/certificateStorage";
 import { ClerkUserGate } from "../components/ClerkUserGate";
@@ -39,6 +49,344 @@ const investopediaLinks: Record<string, { label: string; url: string }[]> = {
     { label: "Paper trading", url: "https://www.investopedia.com/terms/p/papertrade.asp" },
   ],
 };
+
+type PeerReply = {
+  id?: string;
+  user_id?: string;
+  author_short?: string;
+  risk_score?: number;
+  risk_label?: string;
+  badge?: string;
+  body?: string;
+  created_at?: string;
+};
+
+type PeerPost = {
+  id: string;
+  user_id?: string;
+  author_short?: string;
+  risk_score?: number;
+  risk_label?: string;
+  badge?: string;
+  title?: string;
+  body?: string;
+  created_at?: string;
+  replies?: PeerReply[];
+};
+
+/** Backend used to show … + last 6 chars of Clerk id; now Peer #### or "You". */
+function peerAuthorLine(
+  authorUserId: string | undefined,
+  authorShort: string | undefined,
+  viewerId: string,
+): string {
+  if (authorUserId && authorUserId === viewerId) return "You";
+  return authorShort ?? "Member";
+}
+
+function peerBadgeMeta(badge: string | undefined): { label: string; className: string } {
+  switch (badge) {
+    case "helper":
+      return {
+        label: "Steady hand",
+        className:
+          "border-emerald-500/50 bg-emerald-500/10 text-emerald-800 dark:text-emerald-200",
+      };
+    case "seeker":
+      return {
+        label: "Seeking perspective",
+        className:
+          "border-violet-500/50 bg-violet-500/10 text-violet-800 dark:text-violet-200",
+      };
+    case "newcomer":
+      return {
+        label: "New to circle",
+        className: "border-zinc-500/50 bg-zinc-800/50 text-zinc-300",
+      };
+    default:
+      return {
+        label: "Balanced",
+        className:
+          "border-amber-500/50 bg-amber-500/10 text-amber-900 dark:text-amber-100",
+      };
+  }
+}
+
+function PeerRiskChip({
+  badge,
+  riskScore,
+  riskLabel,
+}: {
+  badge: string | undefined;
+  riskScore: number | undefined;
+  riskLabel: string | undefined;
+}) {
+  const m = peerBadgeMeta(badge);
+  return (
+    <span
+      className={`inline-flex flex-wrap items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${m.className}`}
+      title="From your real-holdings risk model (not investment advice)."
+    >
+      {m.label}
+      {typeof riskScore === "number" && badge !== "newcomer" ? (
+        <span className="font-mono normal-case opacity-90">
+          {riskScore.toFixed(1)}/10 · {riskLabel ?? "—"}
+        </span>
+      ) : null}
+      {badge === "newcomer" ? (
+        <span className="font-normal normal-case opacity-80">Add holdings for a risk score</span>
+      ) : null}
+    </span>
+  );
+}
+
+function PeerCircleSection({ userId }: { userId: string }) {
+  const [posts, setPosts] = useState<PeerPost[]>([]);
+  const [myPreview, setMyPreview] = useState<{
+    badge?: string;
+    risk_score?: number;
+    risk_label?: string;
+    has_positions?: boolean;
+  } | null>(null);
+  const [myRiskLine, setMyRiskLine] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [replyText, setReplyText] = useState<Record<string, string>>({});
+  const [replyBusy, setReplyBusy] = useState<string | null>(null);
+  const [formErr, setFormErr] = useState<string | null>(null);
+
+  async function refresh() {
+    const r = (await api.learnCommunityPosts()) as { posts?: PeerPost[] };
+    setPosts(Array.isArray(r.posts) ? r.posts : []);
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      try {
+        const [pr, list] = await Promise.all([
+          api.learnCommunityRiskPreview(userId),
+          api.learnCommunityPosts(),
+        ]);
+        if (cancelled) return;
+        const p = pr as {
+          badge?: string;
+          risk_score?: number;
+          risk_label?: string;
+          has_positions?: boolean;
+        };
+        setMyPreview(p);
+        if (p.has_positions === false) {
+          setMyRiskLine("Add real portfolio holdings to get a risk badge when you post.");
+        } else {
+          setMyRiskLine(
+            `Your risk score: ${typeof p.risk_score === "number" ? `${p.risk_score.toFixed(1)}/10` : "—"} (${p.risk_label ?? "—"}). Lower scores often mean a calmer, more diversified sleeve — peers with steady hands can share perspective below.`,
+          );
+        }
+        const lp = list as { posts?: PeerPost[] };
+        setPosts(Array.isArray(lp.posts) ? lp.posts : []);
+      } catch {
+        if (!cancelled) {
+          setPosts([]);
+          setMyRiskLine(null);
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  async function submitPost() {
+    setFormErr(null);
+    setBusy(true);
+    try {
+      await api.learnCommunityCreatePost(userId, title.trim(), body.trim());
+      setTitle("");
+      setBody("");
+      await refresh();
+    } catch (e) {
+      setFormErr(e instanceof Error ? e.message : "Could not publish");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitReply(postId: string) {
+    const t = (replyText[postId] ?? "").trim();
+    if (t.length < 5) return;
+    setReplyBusy(postId);
+    setFormErr(null);
+    try {
+      await api.learnCommunityReply(userId, postId, t);
+      setReplyText((prev) => ({ ...prev, [postId]: "" }));
+      await refresh();
+    } catch (e) {
+      setFormErr(e instanceof Error ? e.message : "Reply failed");
+    } finally {
+      setReplyBusy(null);
+    }
+  }
+
+  return (
+    <section
+      id="peer-circle"
+      className="glass scroll-mt-24 rounded-2xl border border-sky-500/20 p-6 dark:border-sky-500/15"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-sky-500" />
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Peer circle</h2>
+        </div>
+        {myPreview?.badge ? (
+          <PeerRiskChip
+            badge={myPreview.badge}
+            riskScore={myPreview.risk_score}
+            riskLabel={myPreview.risk_label}
+          />
+        ) : null}
+      </div>
+      <p className="mt-2 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+        A <strong className="text-zinc-800 dark:text-zinc-200">Reddit-style</strong> space for short threads — members with{" "}
+        <strong className="text-emerald-700 dark:text-emerald-300">lower portfolio risk</strong> (calmer, more diversified
+        books) are encouraged to help others think through volatility and concentration. Everyone can ask and reply.{" "}
+        <strong className="text-zinc-800 dark:text-zinc-200">Not financial advice</strong> — be kind, educational, and
+        respect privacy (no account numbers or personal data).
+      </p>
+      {myRiskLine ? (
+        <p className="mt-2 rounded-xl border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-xs text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-300">
+          {myRiskLine}
+        </p>
+      ) : null}
+
+      <div className="mt-5 rounded-xl border border-dashed border-zinc-300 bg-white/50 p-4 dark:border-zinc-700 dark:bg-zinc-950/40">
+        <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Start a thread</p>
+        <label className="sr-only" htmlFor="peer-title">
+          Title
+        </label>
+        <input
+          id="peer-title"
+          className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+          placeholder="Title (e.g. How do you think about sizing after a drawdown?)"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          maxLength={200}
+        />
+        <label className="sr-only" htmlFor="peer-body">
+          Body
+        </label>
+        <textarea
+          id="peer-body"
+          rows={3}
+          className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 placeholder:text-zinc-400 dark:border-zinc-600 dark:bg-zinc-900 dark:text-white"
+          placeholder="Context, question, or experience — min 10 characters."
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          maxLength={5000}
+        />
+        {formErr ? <p className="mt-2 text-sm text-amber-700 dark:text-amber-300">{formErr}</p> : null}
+        <button
+          type="button"
+          disabled={busy || title.trim().length < 3 || body.trim().length < 10}
+          onClick={submitPost}
+          className="mt-3 inline-flex items-center gap-2 rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-500 disabled:pointer-events-none disabled:opacity-50"
+        >
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+          Post to peer circle
+        </button>
+      </div>
+
+      <div className="mt-6 space-y-4">
+        <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Threads</h3>
+        {loading ? (
+          <div className="flex items-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading…
+          </div>
+        ) : posts.length === 0 ? (
+          <p className="text-sm text-zinc-500">No threads yet — be the first to ask or share.</p>
+        ) : (
+          posts.map((post) => (
+            <article
+              key={post.id}
+              className="rounded-xl border border-zinc-200 bg-zinc-50/90 p-4 dark:border-zinc-800 dark:bg-zinc-900/60"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="text-base font-semibold text-zinc-900 dark:text-white">{post.title}</p>
+                <PeerRiskChip
+                  badge={post.badge}
+                  riskScore={post.risk_score}
+                  riskLabel={post.risk_label}
+                />
+              </div>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                {peerAuthorLine(post.user_id, post.author_short, userId)}
+                {post.created_at ? ` · ${post.created_at.slice(0, 10)}` : ""}
+              </p>
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                {post.body}
+              </p>
+
+              {(post.replies ?? []).length > 0 ? (
+                <ul className="mt-4 space-y-3 border-l-2 border-zinc-200 pl-4 dark:border-zinc-700">
+                  {(post.replies ?? []).map((rep) => (
+                    <li key={rep.id ?? rep.created_at}>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] font-medium text-zinc-500">
+                          {peerAuthorLine(rep.user_id, rep.author_short, userId)}
+                        </span>
+                        <PeerRiskChip
+                          badge={rep.badge}
+                          riskScore={rep.risk_score}
+                          riskLabel={rep.risk_label}
+                        />
+                      </div>
+                      <p className="mt-1 whitespace-pre-wrap text-sm text-zinc-700 dark:text-zinc-300">{rep.body}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+
+              <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <label className="sr-only" htmlFor={`reply-${post.id}`}>
+                  Reply
+                </label>
+                <textarea
+                  id={`reply-${post.id}`}
+                  rows={2}
+                  className="min-h-[2.75rem] flex-1 rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-600 dark:bg-zinc-950 dark:text-white"
+                  placeholder="Reply with encouragement or a framework (min 5 characters)…"
+                  value={replyText[post.id] ?? ""}
+                  onChange={(e) =>
+                    setReplyText((prev) => ({ ...prev, [post.id]: e.target.value }))
+                  }
+                  maxLength={2000}
+                />
+                <button
+                  type="button"
+                  disabled={replyBusy === post.id || (replyText[post.id] ?? "").trim().length < 5}
+                  onClick={() => submitReply(post.id)}
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full border border-zinc-300 bg-white px-4 py-2 text-xs font-semibold text-zinc-900 hover:bg-zinc-100 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-50"
+                >
+                  {replyBusy === post.id ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                  Reply
+                </button>
+              </div>
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
 
 function LearnContent({ userId }: { userId: string }) {
   const { user } = useUser();
@@ -190,20 +538,6 @@ function LearnContent({ userId }: { userId: string }) {
         </p>
       </header>
 
-      <section
-        id="mission"
-        className="scroll-mt-24 rounded-2xl border border-emerald-500/25 bg-emerald-500/5 px-5 py-4 dark:border-emerald-500/20 dark:bg-emerald-950/20"
-      >
-        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
-          Hackathon alignment
-        </p>
-        <p className="mt-2 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-          FinSight uses AI for <strong>trustworthy education</strong> (explainers, tutor, “why this matters”) and for{" "}
-          <strong>research & portfolio support</strong> (headline summaries, strategy framing, holdings coach) — with
-          clear limits: no personalized trade instructions; human oversight and professional advice still matter.
-        </p>
-      </section>
-
       <section className="glass rounded-2xl p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Videos to watch</h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
@@ -281,6 +615,8 @@ function LearnContent({ userId }: { userId: string }) {
           </li>
         </ul>
       </section>
+
+      <PeerCircleSection userId={userId} />
 
       {loading && (
         <div className="flex items-center gap-2 text-zinc-500">

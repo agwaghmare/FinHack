@@ -1,5 +1,15 @@
-import { useEffect, useMemo, useState } from "react";
-import { Loader2, Mic, Newspaper, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  Activity,
+  LineChart,
+  Loader2,
+  Mic,
+  Newspaper,
+  PieChart,
+  Sparkles,
+  Target,
+  TrendingUp,
+} from "lucide-react";
 import { api, postAiAudioSummary } from "../lib/api";
 import { ClerkUserGate } from "../components/ClerkUserGate";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
@@ -20,7 +30,6 @@ type CrossAssetPayload = {
   quotes?: { symbol?: string; change_percent?: string }[];
 };
 
-/** Matches current and older API demo strings so panels don’t show raw placeholder text. */
 function isBackendDemoInsight(text: string): boolean {
   if (text.includes(DEMO_SENTENCE)) return true;
   if (text.includes("Demo mode: set GEMINI_API_KEY for live Gemini summaries")) return true;
@@ -33,9 +42,7 @@ Add one of these to the project root file .env (same folder as app.py), not fron
 • GEMINI_API_KEY=…
 • GOOGLE_API_KEY=… (AI Studio / GenAI)
 
-Restart Uvicorn from c:\\finHACk (or your repo root), then refresh. In Settings, the Gemini integration badge should show on.
-
-Common mistake: running uvicorn from another folder used to skip .env — that is fixed in the latest app.py; still ensure the key is in the root .env.`;
+Restart Uvicorn from the repo root, then refresh. In Settings, the Gemini integration badge should show on.`;
 
 type AvArticle = {
   title?: string;
@@ -47,30 +54,58 @@ type AvArticle = {
   overall_sentiment_score?: number;
 };
 
+/** Safe external URL for news links — avoids href="#" opening a blank tab / SPA quirks. */
+function externalArticleUrl(raw: string | undefined): string | null {
+  const u = (raw ?? "").trim();
+  if (!u || u === "#") return null;
+  try {
+    const parsed = new URL(u);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+type PortfolioPosition = {
+  symbol: string;
+  risk_score: number;
+  beta: number;
+  volatility: number;
+  weight: number;
+};
+
+type PortfolioData = {
+  analysis?: string;
+  risk_score?: number;
+  risk_label?: string;
+  positions?: PortfolioPosition[];
+  sharpe_ratio?: number | null;
+  max_drawdown_pct?: number | null;
+  rolling_beta_90d?: number | null;
+};
+
+type StrategyData = {
+  suggestions?: string;
+  regime?: string;
+  confidence_pct?: number;
+  narrative?: string;
+  regime_last_30d?: Record<string, number>;
+  fed_rate?: number;
+  cpi?: number;
+  unemployment?: number;
+  pce?: number;
+  risk_score?: number;
+  risk_label?: string;
+};
+
 function normalizeText(value: unknown): string {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (value == null) return "No insight available yet.";
   return String(value);
 }
 
-function enrichDemoText(kind: "portfolio" | "news" | "strategy"): string {
-  if (kind === "portfolio") {
-    return `Live AI is currently in demo mode.
-
-What this section will show with Gemini enabled:
-- Concentration risk by position and sector (e.g. % of equity in top 3 names)
-- Diversification score with hedge suggestions (index, sector ETFs, duration)
-- 3 clear next actions for sizing and risk control (trim/add, stops, rebalance)
-- Plain-language read on beta vs your benchmark and drawdown sensitivity
-
-What you can do now (no API key):
-- List your largest positions and ask whether any single name is >20–25% of equity
-- Match each holding to a risk bucket: growth, value, defensive, speculative
-- Write down one rule: max loss per trade or max sector weight you will accept
-- Open Insights → “Chain reactions” to practice second-order thinking (e.g. oil ↔ ethanol ↔ row crops)
-
-To enable live output, add GEMINI_API_KEY or OPENAI_API_KEY in your API .env and refresh.`;
-  }
+function enrichDemoText(kind: "news" | "strategy"): string {
   if (kind === "news") {
     return `Live AI is currently in demo mode.
 
@@ -78,7 +113,7 @@ What this section will show with Gemini enabled:
 - Top market themes from the latest headlines (rates, earnings, AI, energy)
 - Bullish vs bearish sentiment balance with confidence-style language
 - Plain-English impact on growth, rates, and volatility expectations
-- “So what?” lines tying headlines to portfolio sectors you hold
+- "So what?" lines tying headlines to portfolio sectors you hold
 
 What you can do now:
 - Scan headlines for words that move your sectors (semis, banks, consumer)
@@ -93,20 +128,427 @@ What this section will show with Gemini enabled:
 - Risk-aware trade adjustments and sizing ideas (half-size, scale-in, time stops)
 - Entry and exit discipline reminders (plans vs impulses)
 - Position-level actions to reduce downside exposure (hedges, trims, correlation)
-- Scenario prompts: “If the index drops 5%, what do I do first?”
+- Scenario prompts: "If the index drops 5%, what do I do first?"
 
 What you can do now:
 - Define max position size as a % of portfolio before the next trade
-- For each open idea, write invalidation: “I exit if ___”
+- For each open idea, write invalidation: "I exit if ___"
 - Re-read your last 3 trades: were they process-driven or emotion-driven?
 
 To enable live output, add GEMINI_API_KEY or OPENAI_API_KEY in your API .env and refresh.`;
 }
 
+function SentimentBadge({ label }: { label?: string }) {
+  if (!label) return null;
+  const lower = label.toLowerCase();
+  const isBull = lower.includes("bull");
+  const isBear = lower.includes("bear");
+  return (
+    <span className={`text-[10px] font-semibold uppercase tracking-wide ${
+      isBull ? "text-emerald-400" : isBear ? "text-rose-400" : "text-zinc-500"
+    }`}>
+      {label}
+    </span>
+  );
+}
+
+function RiskBar({ score, label }: { score: number; label: string }) {
+  const color =
+    label === "Low" ? "bg-emerald-400" :
+    label === "Moderate" ? "bg-yellow-400" :
+    label === "High" ? "bg-orange-400" : "bg-rose-400";
+  const textColor =
+    label === "Low" ? "text-emerald-400" :
+    label === "Moderate" ? "text-yellow-400" :
+    label === "High" ? "text-orange-400" : "text-rose-400";
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-zinc-500">Portfolio Risk Score</span>
+        <span className={`font-bold ${textColor}`}>{score}/10 — {label}</span>
+      </div>
+      <div className="h-2 w-full rounded-full bg-zinc-800">
+        <div
+          className={`h-2 rounded-full transition-all ${color}`}
+          style={{ width: `${(score / 10) * 100}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function PositionRiskRow({ pos }: { pos: PortfolioPosition }) {
+  const textColor =
+    pos.risk_score < 4 ? "text-emerald-400" :
+    pos.risk_score < 6 ? "text-yellow-400" :
+    pos.risk_score < 7.5 ? "text-orange-400" : "text-rose-400";
+
+  const volScore = Math.min(pos.volatility * 15, 4).toFixed(1);
+  const betaScore = Math.min(Math.abs(pos.beta) * 1.5, 3).toFixed(1);
+  const sizeScore = Math.min(pos.weight * 6, 3).toFixed(1);
+
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold text-zinc-200">{pos.symbol}</span>
+        <span className={`text-xs font-bold ${textColor}`}>{pos.risk_score}/10</span>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-[10px]">
+        <div className="space-y-1">
+          <div className="flex justify-between text-zinc-500">
+            <span>Volatility</span>
+            <span className="text-zinc-300">{volScore}/4</span>
+          </div>
+          <div className="h-1 w-full rounded-full bg-zinc-800">
+            <div className="h-1 rounded-full bg-blue-400" style={{ width: `${(Number(volScore) / 4) * 100}%` }} />
+          </div>
+          <span className="text-zinc-500">{(pos.volatility * 100).toFixed(1)}% ann.</span>
+        </div>
+        <div className="space-y-1">
+          <div className="flex justify-between text-zinc-500">
+            <span>Beta</span>
+            <span className="text-zinc-300">{betaScore}/3</span>
+          </div>
+          <div className="h-1 w-full rounded-full bg-zinc-800">
+            <div className="h-1 rounded-full bg-purple-400" style={{ width: `${(Number(betaScore) / 3) * 100}%` }} />
+          </div>
+          <span className="text-zinc-500">β {pos.beta.toFixed(2)}</span>
+        </div>
+        <div className="space-y-1">
+          <div className="flex justify-between text-zinc-500">
+            <span>Weight</span>
+            <span className="text-zinc-300">{sizeScore}/3</span>
+          </div>
+          <div className="h-1 w-full rounded-full bg-zinc-800">
+            <div className="h-1 rounded-full bg-amber-400" style={{ width: `${(Number(sizeScore) / 3) * 100}%` }} />
+          </div>
+          <span className="text-zinc-500">{(pos.weight * 100).toFixed(1)}% of port.</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FormattedInsight({ text, kind }: { text: string; kind?: string }) {
+  const lines = text.split("\n").filter(Boolean);
+
+  return (
+    <div className="mt-4 space-y-3">
+      {lines.map((line, i) => {
+        const clean = line
+          .replace(/\*\*(.+?)\*\*/g, "$1")
+          .replace(/\*(.+?)\*/g, "$1")
+          .trim();
+
+        const isHeader = /^(TOP THEMES|SENTIMENT BALANCE|MACRO IMPACT|SO WHAT)/i.test(clean);
+        const isBullet = /^[-•]\s/.test(clean);
+        const isNumbered = /^\d+\.\s/.test(clean);
+
+        if (isHeader) {
+          return (
+            <p key={i} className="text-[11px] font-semibold uppercase tracking-widest text-blue-400 mt-4 first:mt-0">
+              {clean}
+            </p>
+          );
+        }
+
+        if (isBullet) {
+          return (
+            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
+              <span className="text-zinc-500 shrink-0 mt-0.5">·</span>
+              <span>{clean.replace(/^[-•]\s/, "")}</span>
+            </div>
+          );
+        }
+
+        if (isNumbered && kind === "strategy") {
+          const num = clean.match(/^(\d+)\./)?.[1];
+          const rest = clean.replace(/^\d+\.\s*/, "");
+          const colonIdx = rest.indexOf(":");
+          const title = colonIdx > -1 ? rest.slice(0, colonIdx) : rest;
+          const body = colonIdx > -1 ? rest.slice(colonIdx + 1).trim() : "";
+
+          return (
+            <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full w-5 h-5 flex items-center justify-center shrink-0">
+                  {num}
+                </span>
+                <span className="text-sm font-semibold text-zinc-100">{title}</span>
+              </div>
+              {body && (
+                <p className="text-xs leading-relaxed text-zinc-400 pl-7">{body}</p>
+              )}
+            </div>
+          );
+        }
+
+        if (isNumbered) {
+          const num = clean.match(/^(\d+)\./)?.[1];
+          const rest = clean.replace(/^\d+\.\s/, "");
+          return (
+            <div key={i} className="flex gap-2 text-sm text-zinc-300 leading-relaxed">
+              <span className="text-blue-400 font-semibold shrink-0">{num}.</span>
+              <span>{rest}</span>
+            </div>
+          );
+        }
+
+        return (
+          <p key={i} className="text-sm leading-relaxed text-zinc-400">
+            {clean}
+          </p>
+        );
+      })}
+    </div>
+  );
+}
+
+function regimeBarGradient(label: string): string {
+  if (label === "Bull") {
+    return "bg-gradient-to-b from-emerald-400 to-emerald-600 dark:from-emerald-400/90 dark:to-emerald-700";
+  }
+  if (label === "Bear") {
+    return "bg-gradient-to-b from-rose-400 to-rose-600 dark:from-rose-400/90 dark:to-rose-700";
+  }
+  return "bg-gradient-to-b from-amber-300 to-amber-500 dark:from-amber-400/80 dark:to-amber-600";
+}
+
+function MacroStrategyContext({ strategy }: { strategy: StrategyData }) {
+  const days = strategy.regime_last_30d ?? {};
+  const dayEntries = Object.entries(days).filter(([, v]) => typeof v === "number" && v > 0) as [
+    string,
+    number,
+  ][];
+  const totalDays = dayEntries.reduce((acc, [, n]) => acc + n, 0) || 1;
+
+  const chip = (label: string, value: string, tone: "slate" | "amber" | "sky" | "rose") => {
+    const tones = {
+      slate: "border-zinc-200/80 bg-white/90 text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-zinc-100",
+      amber: "border-amber-500/25 bg-amber-500/5 text-amber-950 dark:border-amber-500/20 dark:bg-amber-950/20 dark:text-amber-100",
+      sky: "border-sky-500/25 bg-sky-500/5 text-sky-950 dark:border-sky-500/20 dark:bg-sky-950/25 dark:text-sky-100",
+      rose: "border-rose-500/20 bg-rose-500/5 text-rose-950 dark:border-rose-500/15 dark:bg-rose-950/20 dark:text-rose-100",
+    };
+    return (
+      <div
+        className={`rounded-xl border px-3 py-3 shadow-sm transition-shadow hover:shadow-md ${tones[tone]}`}
+      >
+        <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-zinc-500 dark:text-zinc-400">
+          {label}
+        </p>
+        <p className="mt-1 break-words text-base font-bold tabular-nums tracking-tight">{value}</p>
+      </div>
+    );
+  };
+
+  return (
+    <div className="mb-4 space-y-6 rounded-2xl border border-indigo-500/20 bg-gradient-to-br from-indigo-500/[0.07] via-zinc-50/60 to-transparent p-5 dark:from-indigo-950/35 dark:via-zinc-950/45 dark:to-transparent">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex gap-3">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500/20 to-indigo-600/10 text-indigo-600 ring-1 ring-indigo-500/30 dark:from-indigo-400/15 dark:to-indigo-600/5 dark:text-indigo-300 dark:ring-indigo-400/25">
+            <Activity className="h-6 w-6" />
+          </div>
+          <div className="min-w-0 pt-0.5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-indigo-600 dark:text-indigo-400">
+              Macro &amp; regime
+            </p>
+            <h3 className="mt-1 text-xl font-bold leading-tight tracking-tight text-zinc-900 dark:text-white sm:text-2xl">
+              Market backdrop
+            </h3>
+            <p className="mt-1.5 max-w-md text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+              Context the model uses for strategy framing — not a forecast.
+            </p>
+          </div>
+        </div>
+        <span
+          className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold shadow-sm ${
+            strategy.regime === "Bull"
+              ? "border-emerald-500/40 bg-emerald-500/[0.12] text-emerald-800 dark:text-emerald-200"
+              : strategy.regime === "Bear"
+                ? "border-rose-500/40 bg-rose-500/[0.12] text-rose-800 dark:text-rose-200"
+                : "border-amber-500/40 bg-amber-500/[0.12] text-amber-900 dark:text-amber-100"
+          }`}
+        >
+          <LineChart className="h-4 w-4 opacity-90" />
+          <span>{strategy.regime}</span>
+          <span className="font-semibold opacity-75">· {strategy.confidence_pct ?? "—"}%</span>
+        </span>
+      </div>
+
+      {strategy.narrative ? (
+        <p className="rounded-xl border border-zinc-200/80 bg-white/50 px-4 py-3 text-sm leading-relaxed text-zinc-700 dark:border-zinc-700/80 dark:bg-zinc-900/40 dark:text-zinc-300">
+          {strategy.narrative}
+        </p>
+      ) : null}
+
+      {dayEntries.length > 0 ? (
+        <div className="space-y-3">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Last ~30 sessions
+            </p>
+            <h4 className="mt-1 text-lg font-bold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
+              Regime mix
+            </h4>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              How many recent days were tagged Bull, Bear, or mixed — hover a band for the exact split.
+            </p>
+          </div>
+
+          <div
+            className="rounded-2xl border border-zinc-200/90 bg-zinc-100/90 p-2 shadow-inner dark:border-zinc-700/90 dark:bg-zinc-950/80"
+            role="img"
+            aria-label={`Regime mix over about ${totalDays} sessions: ${dayEntries.map(([l, d]) => `${l} ${d} days`).join(", ")}`}
+          >
+            <div className="flex h-8 w-full gap-1 sm:h-9">
+              {dayEntries.map(([label, d]) => {
+                const pct = Math.round((d / totalDays) * 100);
+                const showLabel = pct >= 14;
+                return (
+                  <div
+                    key={label}
+                    style={{ flex: `${d} 1 0` }}
+                    className="group relative min-w-[10px] overflow-hidden rounded-lg ring-1 ring-black/[0.06] dark:ring-white/10"
+                  >
+                    <div
+                      className={`flex h-full min-h-[2rem] items-center justify-center transition-[filter,transform] duration-200 group-hover:brightness-110 sm:min-h-[2.25rem] ${regimeBarGradient(label)}`}
+                      title={`${label}: ${d} sessions (${pct}%)`}
+                    >
+                      {showLabel ? (
+                        <span className="pointer-events-none px-1 text-center text-[10px] font-bold uppercase tracking-wider text-white drop-shadow-sm sm:text-xs">
+                          {pct}%
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <ul className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {dayEntries.map(([label, d]) => {
+              const pct = Math.round((d / totalDays) * 100);
+              const barClass =
+                label === "Bull"
+                  ? "from-emerald-500 to-emerald-600"
+                  : label === "Bear"
+                    ? "from-rose-500 to-rose-600"
+                    : "from-amber-400 to-amber-500";
+              return (
+                <li
+                  key={label}
+                  className="flex items-center justify-between gap-3 rounded-xl border border-zinc-200/80 bg-white/70 px-3 py-2.5 dark:border-zinc-700/80 dark:bg-zinc-900/50"
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <span
+                      className={`h-3 w-3 shrink-0 rounded-full bg-gradient-to-br shadow-sm ${barClass}`}
+                    />
+                    <span className="truncate text-sm font-bold text-zinc-900 dark:text-zinc-100">
+                      {label}
+                    </span>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-bold tabular-nums text-zinc-900 dark:text-white">{pct}%</p>
+                    <p className="text-[11px] font-medium tabular-nums text-zinc-500 dark:text-zinc-400">
+                      {d} day{d === 1 ? "" : "s"}
+                    </p>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+
+      {(strategy.fed_rate != null ||
+        strategy.cpi != null ||
+        strategy.unemployment != null ||
+        strategy.pce != null) && (
+        <div className="space-y-4 border-t border-zinc-200/70 pt-5 dark:border-zinc-700/70">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-500 dark:text-zinc-400">
+              Macro snapshot
+            </p>
+            <h4 className="mt-1 text-lg font-bold tracking-tight text-zinc-900 dark:text-white sm:text-xl">
+              Key indicators
+            </h4>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
+              Latest figures shown alongside regime context.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {strategy.fed_rate != null ? chip("Fed funds", `${strategy.fed_rate}%`, "amber") : null}
+            {strategy.cpi != null ? chip("CPI", String(strategy.cpi), "sky") : null}
+            {strategy.unemployment != null
+              ? chip("UNEMP", `${strategy.unemployment}%`, "rose")
+              : null}
+            {strategy.pce != null ? chip("PCE", strategy.pce.toLocaleString(), "slate") : null}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InsightPanelShell({
+  icon,
+  title,
+  subtitle,
+  accent,
+  children,
+}: {
+  icon: ReactNode;
+  title: string;
+  subtitle?: string;
+  accent: "violet" | "blue" | "emerald";
+  children: ReactNode;
+}) {
+  const ring =
+    accent === "violet"
+      ? "border-violet-500/20 dark:border-violet-500/15"
+      : accent === "blue"
+        ? "border-blue-500/20 dark:border-blue-500/15"
+        : "border-emerald-500/20 dark:border-emerald-500/15";
+  const iconBg =
+    accent === "violet"
+      ? "bg-violet-500/12 text-violet-600 ring-violet-500/20 dark:text-violet-300"
+      : accent === "blue"
+        ? "bg-blue-500/12 text-blue-600 ring-blue-500/20 dark:text-blue-300"
+        : "bg-emerald-500/12 text-emerald-600 ring-emerald-500/20 dark:text-emerald-300";
+
+  return (
+    <div className={`glass flex flex-col rounded-2xl border ${ring} p-0 shadow-sm shadow-zinc-900/5 dark:shadow-black/20`}>
+      <div className="flex items-start gap-3 border-b border-zinc-200/70 px-5 py-4 dark:border-zinc-800/80">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${iconBg}`}
+        >
+          {icon}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
+            <span className="rounded-full border border-zinc-200/80 bg-zinc-100/80 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-400">
+              AI tutor
+            </span>
+          </div>
+          {subtitle ? (
+            <p className="mt-1 text-[11px] leading-relaxed text-zinc-500 dark:text-zinc-400">
+              {subtitle}
+            </p>
+          ) : null}
+        </div>
+      </div>
+      <div className="flex-1 px-5 pb-5 pt-4">{children}</div>
+    </div>
+  );
+}
+
 function InsightsContent({ userId }: { userId: string }) {
-  const [portfolio, setPortfolio] = useState<unknown>(null);
+  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null);
   const [news, setNews] = useState<unknown>(null);
-  const [strategy, setStrategy] = useState<unknown>(null);
+  const [strategy, setStrategy] = useState<StrategyData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -126,20 +568,15 @@ function InsightsContent({ userId }: { userId: string }) {
   const [newsErr, setNewsErr] = useState<string | null>(null);
   const [integrations, setIntegrations] = useState<{ gemini?: boolean } | null>(null);
   const [heldSymbols, setHeldSymbols] = useState<string[]>([]);
+  const [holdingsNews, setHoldingsNews] = useState<Record<string, AvArticle[]>>({});
+  const [holdingsNewsLoading, setHoldingsNewsLoading] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .integrationStatus()
-      .then((s) => {
-        if (!cancelled) setIntegrations(s);
-      })
-      .catch(() => {
-        if (!cancelled) setIntegrations(null);
-      });
-    return () => {
-      cancelled = true;
-    };
+    api.integrationStatus()
+      .then((s) => { if (!cancelled) setIntegrations(s); })
+      .catch(() => { if (!cancelled) setIntegrations(null); });
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
@@ -152,15 +589,12 @@ function InsightsContent({ userId }: { userId: string }) {
         if (!cancelled) setCrossAsset(null);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    api
-      .holdingsSnapshot(userId)
+    api.holdingsSnapshot(userId)
       .then((s) => {
         if (cancelled) return;
         const rows = ((s as { positions?: { symbol?: string }[] }).positions ?? [])
@@ -168,13 +602,33 @@ function InsightsContent({ userId }: { userId: string }) {
           .filter(Boolean);
         setHeldSymbols(rows.slice(0, 8));
       })
-      .catch(() => {
-        if (!cancelled) setHeldSymbols([]);
-      });
-    return () => {
-      cancelled = true;
-    };
+      .catch(() => { if (!cancelled) setHeldSymbols([]); });
+    return () => { cancelled = true; };
   }, [userId]);
+
+  useEffect(() => {
+    if (heldSymbols.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      setHoldingsNewsLoading(true);
+      const results: Record<string, AvArticle[]> = {};
+      await Promise.all(
+        heldSymbols.slice(0, 6).map(async (ticker) => {
+          try {
+            const r = await api.marketNews(ticker, 5) as { articles?: AvArticle[] };
+            if (!cancelled) results[ticker] = r.articles?.slice(0, 3) ?? [];
+          } catch {
+            if (!cancelled) results[ticker] = [];
+          }
+        })
+      );
+      if (!cancelled) {
+        setHoldingsNews(results);
+        setHoldingsNewsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [heldSymbols]);
 
   useEffect(() => {
     let ax = false;
@@ -195,9 +649,7 @@ function InsightsContent({ userId }: { userId: string }) {
         if (!ax) setNewsLoading(false);
       }
     })();
-    return () => {
-      ax = true;
-    };
+    return () => { ax = true; };
   }, [newsTicker, heldSymbols]);
 
   useEffect(() => {
@@ -212,9 +664,9 @@ function InsightsContent({ userId }: { userId: string }) {
           api.aiStrategy(userId),
         ]);
         if (!cancelled) {
-          setPortfolio(p);
+          setPortfolio(p as PortfolioData);
           setNews(n);
-          setStrategy(s);
+          setStrategy(s as StrategyData);
         }
       } catch (e) {
         if (!cancelled) setErr(e instanceof Error ? e.message : "Failed to load");
@@ -222,49 +674,39 @@ function InsightsContent({ userId }: { userId: string }) {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [userId]);
 
   const sections = useMemo(() => {
-    const portfolioText =
-      typeof portfolio === "object" && portfolio && "analysis" in portfolio
-        ? normalizeText((portfolio as { analysis?: unknown }).analysis)
-        : normalizeText(portfolio);
+    const portfolioText = normalizeText(portfolio?.analysis);
     const newsText =
       typeof news === "object" && news && "summary" in news
         ? normalizeText((news as { summary?: unknown }).summary)
         : normalizeText(news);
-    const strategyText =
-      typeof strategy === "object" && strategy && "suggestions" in strategy
-        ? normalizeText((strategy as { suggestions?: unknown }).suggestions)
-        : normalizeText(strategy);
-
+    const strategyText = normalizeText(strategy?.suggestions);
     const geminiOff = integrations?.gemini === false;
-    const pick = (raw: string, kind: "portfolio" | "news" | "strategy") => {
-      if (!isBackendDemoInsight(raw)) return raw;
-      if (geminiOff) return SHORT_GEMINI_SETUP;
-      return enrichDemoText(kind);
-    };
 
     return [
       {
         key: "portfolio",
         title: "Portfolio analysis",
-        text: pick(portfolioText, "portfolio"),
+        text: isBackendDemoInsight(portfolioText) ? "" : portfolioText,
         placeholder: isBackendDemoInsight(portfolioText),
       },
       {
         key: "news",
         title: "News sentiment",
-        text: pick(newsText, "news"),
+        text: isBackendDemoInsight(newsText)
+          ? geminiOff ? SHORT_GEMINI_SETUP : enrichDemoText("news")
+          : newsText,
         placeholder: isBackendDemoInsight(newsText),
       },
       {
         key: "strategy",
         title: "Strategy suggestions",
-        text: pick(strategyText, "strategy"),
+        text: isBackendDemoInsight(strategyText)
+          ? geminiOff ? SHORT_GEMINI_SETUP : enrichDemoText("strategy")
+          : strategyText,
         placeholder: isBackendDemoInsight(strategyText),
       },
     ];
@@ -274,17 +716,12 @@ function InsightsContent({ userId }: { userId: string }) {
     setAudioBusy(true);
     const text = sections.map((x) => `${x.title}: ${x.text}`).join("\n\n");
     try {
-      const blob = await postAiAudioSummary({
-        text: text.slice(0, 4500),
-      });
+      const blob = await postAiAudioSummary({ text: text.slice(0, 4500) });
       const url = URL.createObjectURL(blob);
       if (audioUrl) URL.revokeObjectURL(audioUrl);
       setAudioUrl(url);
     } catch {
-      const spoken =
-        text.slice(0, 3800) +
-        ". End of summary. ElevenLabs MP3 was unavailable; this was browser speech. " +
-        "Configure ELEVENLABS_API_KEY on the API with a plan that allows TTS, or keep using read aloud.";
+      const spoken = text.slice(0, 3800) + ". End of summary. ElevenLabs MP3 was unavailable; this was browser speech.";
       const u = new SpeechSynthesisUtterance(spoken);
       window.speechSynthesis.speak(u);
     } finally {
@@ -294,6 +731,111 @@ function InsightsContent({ userId }: { userId: string }) {
 
   return (
     <div className="space-y-8">
+
+      {/* ── Page Header ── */}
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Insights</p>
+          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">
+            AI research support &amp; strategy framing
+          </h1>
+          <p className="mt-2 max-w-2xl text-sm text-zinc-500">
+            Headlines from GNews and Yahoo, plus LLM panels (Gemini/OpenAI) for portfolio, news, and paper-lab strategy —
+            aligned with <strong className="font-medium text-zinc-600 dark:text-zinc-400">investment research</strong>{" "}
+            support; combine with <strong className="font-medium text-zinc-600 dark:text-zinc-400">Learn Hub</strong> for
+            education. Not personalized advice.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={playCombinedAudio}
+          disabled={audioBusy || loading}
+          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900"
+        >
+          {audioBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mic className="h-3.5 w-3.5" />}
+          Play AI audio
+        </button>
+      </header>
+
+      {/* ── Holdings News Section ── */}
+      <section className="glass rounded-2xl border border-blue-500/20 p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-blue-400" />
+            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">News for your positions</h2>
+            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-300">
+              Live
+            </span>
+          </div>
+          {heldSymbols.length > 0 && (
+            <div className="flex flex-wrap gap-1.5">
+              {heldSymbols.map((t) => (
+                <span key={t} className="rounded-full border border-zinc-700 bg-zinc-800/60 px-2.5 py-0.5 text-[11px] font-semibold text-zinc-300">
+                  {t}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+        {holdingsNewsLoading && (
+          <div className="flex items-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Fetching headlines for your holdings…
+          </div>
+        )}
+        {!holdingsNewsLoading && heldSymbols.length === 0 && (
+          <p className="text-sm text-zinc-500">No holdings found. Add positions to see relevant headlines here.</p>
+        )}
+        {!holdingsNewsLoading && heldSymbols.length > 0 && (
+          <div className="space-y-7">
+            {heldSymbols.slice(0, 6).map((ticker) => {
+              const articles = holdingsNews[ticker] ?? [];
+              return (
+                <div key={ticker}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-bold uppercase tracking-widest text-blue-400">{ticker}</span>
+                    <div className="h-px flex-1 bg-zinc-800" />
+                  </div>
+                  {articles.length === 0 ? (
+                    <p className="text-xs text-zinc-500">No headlines found for {ticker}.</p>
+                  ) : (
+                    <ul className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                      {articles.map((a, i) => {
+                        const href = externalArticleUrl(a.url);
+                        const title = a.title ?? "Untitled";
+                        return (
+                        <li key={`${a.url ?? i}-${i}`} className="flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                          {href ? (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="line-clamp-3 text-sm font-medium leading-snug text-zinc-100 hover:underline underline-offset-2"
+                            >
+                              {title}
+                            </a>
+                          ) : (
+                            <span className="line-clamp-3 text-sm font-medium leading-snug text-zinc-100">
+                              {title}
+                            </span>
+                          )}
+                          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-zinc-500 mt-auto">
+                            {a.source && <span className="truncate">{a.source}</span>}
+                            {a.time_published && <span className="tabular-nums shrink-0">{a.time_published.slice(0, 10)}</span>}
+                            <SentimentBadge label={a.overall_sentiment_label} />
+                          </div>
+                        </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* ── Chain Reactions Section ── */}
       <section className="glass rounded-2xl border border-amber-500/20 p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
@@ -313,21 +855,15 @@ function InsightsContent({ userId }: { userId: string }) {
           />
         </div>
         <p className="mt-3 text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-          {crossAsset?.headline ??
-            "Link second-order effects: cheaper oil can reshape ethanol economics while fertilizer and weather drive row-crop supply on another track."}
+          {crossAsset?.headline ?? "Link second-order effects: cheaper oil can reshape ethanol economics while fertilizer and weather drive row-crop supply on another track."}
         </p>
         {crossAsset?.ai_narrative && (
           <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">{crossAsset.ai_narrative}</p>
         )}
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           {(crossAsset?.chains ?? []).map((ch) => (
-            <div
-              key={ch.id ?? ch.title}
-              className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/50"
-            >
-              <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-500/90">
-                {ch.title}
-              </p>
+            <div key={ch.id ?? ch.title} className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+              <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-500/90">{ch.title}</p>
               <p className="mt-2 text-[11px] text-zinc-500">{ch.when}</p>
               <ul className="mt-3 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">
                 {(ch.links ?? []).map((ln, i) => (
@@ -347,158 +883,10 @@ function InsightsContent({ userId }: { userId: string }) {
           <div className="mt-4 flex flex-wrap gap-2 text-[11px] text-zinc-500">
             Snapshot:
             {crossAsset.quotes.map((qq) => (
-              <span
-                key={qq.symbol}
-                className="rounded-full border border-zinc-200 px-2 py-0.5 dark:border-zinc-800"
-              >
+              <span key={qq.symbol} className="rounded-full border border-zinc-200 px-2 py-0.5 dark:border-zinc-800">
                 {qq.symbol} {qq.change_percent != null ? `${qq.change_percent}%` : ""}
               </span>
             ))}
-          </div>
-        )}
-      </section>
-
-      <header className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">
-            Insights
-          </p>
-          <h1 className="mt-1 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white">
-            AI research support &amp; strategy framing
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Headlines from GNews and Yahoo, plus LLM panels (Gemini/OpenAI) for portfolio, news, and paper-lab strategy —
-            aligned with <strong className="font-medium text-zinc-600 dark:text-zinc-400">investment research</strong>{" "}
-            support; combine with <strong className="font-medium text-zinc-600 dark:text-zinc-400">Learn Hub</strong> for
-            education. Not personalized advice.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={playCombinedAudio}
-          disabled={audioBusy || loading}
-          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white dark:bg-white dark:text-zinc-900"
-        >
-          {audioBusy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <Mic className="h-3.5 w-3.5" />
-          )}
-          Play AI audio
-        </button>
-      </header>
-
-      <section className="glass rounded-2xl p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <Newspaper className="h-5 w-5 text-blue-400" />
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">
-              Market news feed
-            </h2>
-            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-200">
-              GNews + Yahoo
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <label htmlFor="ins-news-ticker" className="text-xs text-zinc-500">
-              Tickers
-            </label>
-            <input
-              id="ins-news-ticker"
-              className="w-32 rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm uppercase text-white dark:bg-zinc-900/80"
-              value={newsTicker}
-              onChange={(e) => setNewsTicker(e.target.value.toUpperCase())}
-              placeholder={heldSymbols.length > 0 ? heldSymbols.slice(0, 3).join(",") : "SPY"}
-              maxLength={24}
-            />
-          </div>
-        </div>
-        <p className="mt-2 text-xs text-zinc-500">
-          Uses <code className="rounded bg-zinc-800 px-1">GNews</code> (with{" "}
-          <code className="rounded bg-zinc-800 px-1">GNEWS_API_KEY</code>) plus Yahoo headlines. Enter
-          one or more tickers (e.g. SPY or SPY,NVDA) to bias the search. Blank defaults to your holdings.
-        </p>
-
-        {newsLoading && (
-          <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
-            <Loader2 className="h-4 w-4 animate-spin" /> Loading headlines…
-          </div>
-        )}
-        {newsErr && (
-          <p className="mt-4 text-sm text-amber-600 dark:text-amber-300">{newsErr}</p>
-        )}
-
-        {!newsLoading && newsFeed?.error && (
-          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-700 dark:text-red-200">
-            {newsFeed.error}
-          </p>
-        )}
-
-        {!newsLoading && newsFeed?.api_message && (
-          <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-100">
-            {newsFeed.api_message}
-          </p>
-        )}
-
-        {!newsLoading && newsFeed && (
-          <div className="mt-4 space-y-3">
-            <div className="flex flex-wrap items-center gap-3 text-sm">
-              <span className="rounded-full border border-zinc-700 bg-zinc-900/40 px-3 py-1 text-zinc-200">
-                Avg sentiment:{" "}
-                {typeof newsFeed.avg_sentiment === "number" ? newsFeed.avg_sentiment.toFixed(3) : "—"}
-              </span>
-              <span className="text-zinc-500">
-                {newsFeed.article_count ?? newsFeed.articles?.length ?? 0} articles
-              </span>
-            </div>
-            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {(newsFeed.articles ?? []).slice(0, 6).map((a, i) => (
-                <li
-                  key={`${a.url ?? i}-${i}`}
-                  className="flex h-full min-h-[8rem] flex-row gap-3 rounded-xl border border-zinc-800 bg-zinc-900/30 p-3 dark:bg-zinc-900/30"
-                >
-                  <div className="min-w-0 flex-1">
-                    <a
-                      href={a.url ?? "#"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="line-clamp-3 text-sm font-medium leading-snug text-zinc-800 underline-offset-2 hover:underline dark:text-zinc-100"
-                    >
-                      {a.title ?? "Untitled"}
-                    </a>
-                    <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-zinc-500">
-                      {a.source && <span className="truncate">{a.source}</span>}
-                      {a.time_published && (
-                        <span className="shrink-0 tabular-nums">{a.time_published.slice(0, 10)}</span>
-                      )}
-                      {a.overall_sentiment_score != null && (
-                        <span className="tabular-nums">s {Number(a.overall_sentiment_score).toFixed(2)}</span>
-                      )}
-                    </div>
-                    {a.summary ? (
-                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
-                        {a.summary}
-                      </p>
-                    ) : null}
-                  </div>
-                  {a.overall_sentiment_label ? (
-                    <div className="flex w-20 shrink-0 flex-col items-end justify-start border-l border-zinc-800/80 pl-2 sm:w-24 sm:pl-3">
-                      <span
-                        className={`max-w-full text-right text-[10px] font-semibold uppercase leading-tight tracking-wide ${
-                          (a.overall_sentiment_label ?? "").toLowerCase().includes("bull")
-                            ? "text-emerald-500 dark:text-emerald-400"
-                            : (a.overall_sentiment_label ?? "").toLowerCase().includes("bear")
-                              ? "text-rose-500 dark:text-rose-400"
-                              : "text-zinc-500 dark:text-zinc-400"
-                        }`}
-                      >
-                        {a.overall_sentiment_label}
-                      </span>
-                    </div>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
           </div>
         )}
       </section>
@@ -513,43 +901,239 @@ function InsightsContent({ userId }: { userId: string }) {
           {err}
         </p>
       )}
-
       {integrations?.gemini === false && (
         <div className="rounded-xl border border-amber-500/50 bg-amber-950/25 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
           <p className="font-semibold text-amber-800 dark:text-amber-200">
             AI insight panels are in demo until Gemini is configured
           </p>
           <p className="mt-2 text-xs leading-relaxed text-amber-800/90 dark:text-amber-100/90">
-            The API reports no Gemini key. Add{" "}
-            <code className="rounded bg-black/10 px-1 dark:bg-white/10">GEMINI_API_KEY</code> or{" "}
+            Add <code className="rounded bg-black/10 px-1 dark:bg-white/10">GEMINI_API_KEY</code> or{" "}
             <code className="rounded bg-black/10 px-1 dark:bg-white/10">GOOGLE_API_KEY</code> to{" "}
-            <code className="rounded bg-black/10 px-1 dark:bg-white/10">.env</code> in the project root
-            (next to <code className="rounded bg-black/10 px-1 dark:bg-white/10">app.py</code>), restart
-            Uvicorn, reload this page, and check Settings → integrations for a green Gemini badge.
+            <code className="rounded bg-black/10 px-1 dark:bg-white/10">.env</code> in the project root, restart Uvicorn, and reload.
           </p>
         </div>
       )}
+      {audioUrl && <audio controls src={audioUrl} className="w-full max-w-md" />}
 
-      {audioUrl && (
-        <audio controls src={audioUrl} className="w-full max-w-md" />
-      )}
-
+      {/* ── Insight Panels (AI tutor) ── */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {sections.map(({ key, title, text, placeholder }) => (
-          <div key={key} className="glass rounded-2xl p-6">
-            <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">{title}</h2>
-            {placeholder && (
+        {sections.map(({ key, title, text, placeholder }) => {
+          const shell =
+            key === "portfolio"
+              ? {
+                  accent: "violet" as const,
+                  icon: <PieChart className="h-5 w-5" />,
+                  subtitle:
+                    "Risk, Sharpe, and position context from your linked holdings — for learning, not advice.",
+                }
+              : key === "news"
+                ? {
+                    accent: "blue" as const,
+                    icon: <Newspaper className="h-5 w-5" />,
+                    subtitle: "How headlines are leaning and what that often implies for themes and sentiment.",
+                  }
+                : {
+                    accent: "emerald" as const,
+                    icon: <Target className="h-5 w-5" />,
+                    subtitle: "Paper-lab framing with macro regime context — not personalized trade instructions.",
+                  };
+
+          return (
+            <InsightPanelShell
+              key={key}
+              icon={shell.icon}
+              title={title}
+              subtitle={shell.subtitle}
+              accent={shell.accent}
+            >
+            {/* Portfolio risk score UI */}
+            {key === "portfolio" && portfolio?.risk_score != null && (
+              <div className="mt-4 space-y-3">
+                <RiskBar score={portfolio.risk_score} label={portfolio.risk_label ?? "Unknown"} />
+                <div className="mt-3 space-y-1.5">
+                  {(portfolio.positions ?? []).map((pos) => (
+                    <PositionRiskRow key={pos.symbol} pos={pos} />
+                  ))}
+                </div>
+                {/* Portfolio-level metrics */}
+                {(portfolio.sharpe_ratio != null || portfolio.max_drawdown_pct != null || portfolio.rolling_beta_90d != null) && (
+                  <div className="mt-4 pt-4 border-t border-zinc-800 grid grid-cols-3 gap-3">
+                    <div className="space-y-1 text-center">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Sharpe Ratio</p>
+                      <p className={`text-lg font-bold ${
+                        portfolio.sharpe_ratio == null ? "text-zinc-500" :
+                        portfolio.sharpe_ratio >= 1 ? "text-emerald-400" :
+                        portfolio.sharpe_ratio >= 0 ? "text-yellow-400" : "text-rose-400"
+                      }`}>
+                        {portfolio.sharpe_ratio != null ? portfolio.sharpe_ratio.toFixed(2) : "—"}
+                      </p>
+                      <p className="text-[10px] text-zinc-600">
+                        {portfolio.sharpe_ratio == null ? "" :
+                         portfolio.sharpe_ratio >= 1 ? "Good" :
+                         portfolio.sharpe_ratio >= 0 ? "Moderate" : "Poor"}
+                      </p>
+                    </div>
+                    <div className="space-y-1 text-center">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Max Drawdown</p>
+                      <p className={`text-lg font-bold ${
+                        portfolio.max_drawdown_pct == null ? "text-zinc-500" :
+                        portfolio.max_drawdown_pct > -10 ? "text-emerald-400" :
+                        portfolio.max_drawdown_pct > -20 ? "text-yellow-400" : "text-rose-400"
+                      }`}>
+                        {portfolio.max_drawdown_pct != null ? `${portfolio.max_drawdown_pct.toFixed(1)}%` : "—"}
+                      </p>
+                      <p className="text-[10px] text-zinc-600">1-year low</p>
+                    </div>
+                    <div className="space-y-1 text-center">
+                      <p className="text-[10px] text-zinc-500 uppercase tracking-wide">Rolling Beta</p>
+                      <p className={`text-lg font-bold ${
+                        portfolio.rolling_beta_90d == null ? "text-zinc-500" :
+                        Math.abs(portfolio.rolling_beta_90d) < 0.8 ? "text-emerald-400" :
+                        Math.abs(portfolio.rolling_beta_90d) < 1.2 ? "text-yellow-400" : "text-rose-400"
+                      }`}>
+                        {portfolio.rolling_beta_90d != null ? portfolio.rolling_beta_90d.toFixed(2) : "—"}
+                      </p>
+                      <p className="text-[10px] text-zinc-600">90-day vs SPY</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {key === "portfolio" && portfolio?.risk_score == null && (
+              <p className="mt-4 text-sm text-zinc-500">Add positions to see your risk score.</p>
+            )}
+
+            {key === "strategy" && strategy?.regime ? (
+              <MacroStrategyContext strategy={strategy} />
+            ) : null}
+
+            {key !== "portfolio" && placeholder && (
               <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-[11px] text-amber-800 dark:text-amber-200">
                 <Sparkles className="h-3.5 w-3.5" />
                 {integrations?.gemini === false ? "Setup: add API key" : "Demo mode"}
               </div>
             )}
-            <p className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-              {text}
-            </p>
-          </div>
-        ))}
+
+            {text ? <FormattedInsight text={text} kind={key} /> : null}
+            </InsightPanelShell>
+          );
+        })}
       </div>
+
+      {/* ── Market news feed (bottom) ── */}
+      <section
+        id="market-news-feed"
+        className="glass rounded-2xl border border-blue-500/15 p-6 shadow-sm dark:border-blue-500/10"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/10 text-blue-600 ring-1 ring-blue-500/20 dark:text-blue-300">
+              <Newspaper className="h-5 w-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Market news feed</h2>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">GNews + Yahoo — search by ticker or your holdings</p>
+            </div>
+            <span className="rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-700 dark:text-blue-200">
+              Live
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <label htmlFor="ins-news-ticker" className="text-xs text-zinc-500">Tickers</label>
+            <input
+              id="ins-news-ticker"
+              className="w-36 rounded-xl border border-zinc-300 bg-white/90 px-3 py-2 text-sm uppercase text-zinc-900 shadow-sm placeholder:text-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/80 dark:text-white"
+              value={newsTicker}
+              onChange={(e) => setNewsTicker(e.target.value.toUpperCase())}
+              placeholder={heldSymbols.length > 0 ? heldSymbols.slice(0, 3).join(",") : "SPY"}
+              maxLength={24}
+            />
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+          Uses <code className="rounded bg-zinc-200/80 px-1.5 py-0.5 text-[11px] dark:bg-zinc-800">GNews</code> (with{" "}
+          <code className="rounded bg-zinc-200/80 px-1.5 py-0.5 text-[11px] dark:bg-zinc-800">GNEWS_API_KEY</code>) plus Yahoo.
+          Enter tickers (e.g. <span className="font-mono text-zinc-600 dark:text-zinc-300">SPY,NVDA</span>) or leave blank for holdings.
+        </p>
+        {newsLoading && (
+          <div className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading headlines…
+          </div>
+        )}
+        {newsErr && <p className="mt-4 text-sm text-amber-600 dark:text-amber-300">{newsErr}</p>}
+        {!newsLoading && newsFeed?.error && (
+          <p className="mt-4 rounded-xl border border-red-500/30 bg-red-950/20 px-3 py-2 text-sm text-red-700 dark:text-red-200">
+            {newsFeed.error}
+          </p>
+        )}
+        {!newsLoading && newsFeed?.api_message && (
+          <p className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/20 px-3 py-2 text-sm text-amber-800 dark:text-amber-100">
+            {newsFeed.api_message}
+          </p>
+        )}
+        {!newsLoading && newsFeed && (
+          <div className="mt-5 space-y-4">
+            <div className="flex flex-wrap items-center gap-3 text-sm">
+              <span className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1.5 font-medium text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900/50 dark:text-zinc-200">
+                Avg sentiment:{" "}
+                {typeof newsFeed.avg_sentiment === "number" ? newsFeed.avg_sentiment.toFixed(3) : "—"}
+              </span>
+              <span className="text-zinc-500">
+                {newsFeed.article_count ?? newsFeed.articles?.length ?? 0} articles
+              </span>
+            </div>
+            <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {(newsFeed.articles ?? []).slice(0, 6).map((a, i) => {
+                const href = externalArticleUrl(a.url);
+                const title = a.title ?? "Untitled";
+                return (
+                <li
+                  key={`${a.url ?? i}-${i}`}
+                  className="flex h-full min-h-[8rem] flex-row gap-3 rounded-xl border border-zinc-200/90 bg-white/60 p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900/40"
+                >
+                  <div className="min-w-0 flex-1">
+                    {href ? (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="line-clamp-3 text-sm font-medium leading-snug text-zinc-900 underline-offset-2 hover:underline dark:text-zinc-100"
+                      >
+                        {title}
+                      </a>
+                    ) : (
+                      <span className="line-clamp-3 text-sm font-medium leading-snug text-zinc-900 dark:text-zinc-100">
+                        {title}
+                      </span>
+                    )}
+                    <div className="mt-2 flex flex-wrap gap-x-2 gap-y-1 text-[10px] text-zinc-500">
+                      {a.source && <span className="truncate">{a.source}</span>}
+                      {a.time_published && (
+                        <span className="shrink-0 tabular-nums">{a.time_published.slice(0, 10)}</span>
+                      )}
+                      {a.overall_sentiment_score != null && (
+                        <span className="tabular-nums">s {Number(a.overall_sentiment_score).toFixed(2)}</span>
+                      )}
+                    </div>
+                    {a.summary && (
+                      <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-zinc-600 dark:text-zinc-400">
+                        {a.summary}
+                      </p>
+                    )}
+                  </div>
+                  {a.overall_sentiment_label && (
+                    <div className="flex w-20 shrink-0 flex-col items-end justify-start border-l border-zinc-200/80 pl-2 dark:border-zinc-800/80 sm:w-24 sm:pl-3">
+                      <SentimentBadge label={a.overall_sentiment_label} />
+                    </div>
+                  )}
+                </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </section>
     </div>
   );
 }

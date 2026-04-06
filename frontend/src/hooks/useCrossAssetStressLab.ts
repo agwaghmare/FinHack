@@ -42,12 +42,14 @@ export function useCrossAssetStressLab() {
     (async () => {
       try {
         const [m, px] = await Promise.all([
-          api.marketMacro(),
-          api.marketPrices("WTI,GLD,SLV,DBA,USO,SPY,EURUSD,USDJPY,GBPUSD"),
+          api.marketMacro().catch(() => null),
+          api.marketPrices("WTI,GLD,SLV,DBA,USO,SPY,EURUSD,USDJPY,GBPUSD").catch(() => ({
+            quotes: [] as Quote[],
+          })),
         ]);
         if (cancelled) return;
-        const mm = m as { rates?: number };
-        setMacroRates(typeof mm.rates === "number" ? mm.rates : null);
+        const mm = m as { rates?: number } | null;
+        setMacroRates(mm && typeof mm.rates === "number" ? mm.rates : null);
         const quotes = (px as { quotes?: Quote[] }).quotes ?? [];
         const wti = quotes.find((q) => (q.symbol ?? "").includes("WTI") || q.kind === "commodity");
         const bo = typeof wti?.price === "number" ? wti.price : 75;

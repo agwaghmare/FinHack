@@ -3,6 +3,10 @@ import { useLocation } from "react-router-dom";
 import { Loader2, Search, TrendingDown, TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
 import { ClerkUserGate } from "../components/ClerkUserGate";
+import {
+  MistralFormattedText,
+  MistralInsightPanel,
+} from "../components/MistralInsightPanel";
 
 const POPULAR_TICKERS = [
   "AAPL",
@@ -19,8 +23,13 @@ const POPULAR_TICKERS = [
   "JPM",
 ];
 
-const DEMO_AI =
-  "Demo mode: set GEMINI_API_KEY for live Gemini summaries. This is placeholder insight text for the hackathon UI.";
+/** Backend copy when MISTRAL_API_KEY is missing */
+function isMistralPaperLabSetupMessage(raw: string): boolean {
+  return (
+    raw.includes("MISTRAL_API_KEY") ||
+    raw.includes("Mistral Paper Lab needs Mistral AI")
+  );
+}
 
 function PaperTradingContent({ userId }: { userId: string }) {
   const location = useLocation();
@@ -49,8 +58,8 @@ function PaperTradingContent({ userId }: { userId: string }) {
         const fb = (f as { feedback?: unknown }).feedback;
         const raw = typeof fb === "string" ? fb : JSON.stringify(fb ?? f, null, 2);
         setFeedback(
-          raw.includes(DEMO_AI)
-            ? "AI coaching is in demo mode right now. Once GEMINI_API_KEY is configured, you will see personalized notes about concentration, position sizing, trade frequency, and practical next steps."
+          isMistralPaperLabSetupMessage(raw)
+            ? "Mistral Paper Lab uses Mistral AI on the API server. Add MISTRAL_API_KEY to the repo root .env (same folder as app.py), restart uvicorn, then refresh — you’ll get fundamentals-aware commentary on your paper holdings, activity analytics, and simulation-only suggestions (not real-money advice)."
             : raw,
         );
       } else {
@@ -295,14 +304,23 @@ function PaperTradingContent({ userId }: { userId: string }) {
                 </tr>
               ) : (
                 (board?.rows ?? []).map((row, idx) => {
-                  const r = row as { user_id?: string; points?: number };
+                  const r = row as {
+                    user_id?: string;
+                    points?: number;
+                    display_label?: string;
+                  };
+                  const isYou = r.user_id === userId;
+                  const name =
+                    isYou
+                      ? "You"
+                      : (r.display_label?.trim() || "Member");
                   return (
                     <tr
                       key={`${r.user_id}-${idx}`}
                       className="border-t border-zinc-200 text-zinc-800 dark:border-zinc-800 dark:text-zinc-300"
                     >
                       <td className="px-3 py-2">{idx + 1}</td>
-                      <td className="px-3 py-2">{r.user_id ?? "User"}</td>
+                      <td className="px-3 py-2">{name}</td>
                       <td className="px-3 py-2">{r.points ?? 0}</td>
                     </tr>
                   );
@@ -313,12 +331,18 @@ function PaperTradingContent({ userId }: { userId: string }) {
         </div>
       </div>
 
-      <div id="ai-feedback" className="glass scroll-mt-24 rounded-2xl p-6">
-        <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">AI feedback</h2>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-zinc-600 dark:text-zinc-300">
-          {feedback ?? "Run trades to generate feedback (Gemini)."}
-        </p>
-      </div>
+      <MistralInsightPanel
+        id="ai-feedback"
+        variant="sky"
+        title="Mistral Lab"
+        subtitle="Fundamentals-aware commentary on your paper portfolio, activity metrics, and simulation-only next steps. Not personalized investment advice."
+        isLoading={loading}
+        hasContent={Boolean(feedback?.trim())}
+        error={null}
+        emptyHint="Load the page or place a trade to fetch Mistral Lab feedback for your sandbox book."
+      >
+        {feedback?.trim() ? <MistralFormattedText text={feedback} /> : null}
+      </MistralInsightPanel>
     </div>
   );
 }

@@ -30,6 +30,10 @@ CORS_ORIGINS = _DEFAULT_ORIGINS + (
     [o.strip() for o in _extra.split(",") if o.strip()] if _extra else []
 )
 
+# When 5173 is taken, Vite uses 5174, 5175, … — those Origins were missing and fetch() failed CORS.
+_LOCAL_DEV_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+_cors_strict = os.getenv("CORS_STRICT", "").strip().lower() in ("1", "true", "yes")
+
 app = FastAPI(
     title="AI Financial Companion",
     description="Aggregates market data, macro, sentiment, AI insights, and alerts",
@@ -39,6 +43,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex=None if _cors_strict else _LOCAL_DEV_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
