@@ -112,7 +112,7 @@ function NotificationAndDigestSettings() {
       <div className="glass max-w-2xl rounded-2xl p-6">
         <p className="text-sm font-semibold text-zinc-900 dark:text-white">Notifications (local prefs)</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-          Toggles are stored in this browser. Delivering email/SMS still requires backend keys (Zapier,
+          Toggles are stored in this browser. Delivering email/SMS still requires backend env (SMTP,
           Twilio) and server-side rules — these switches tell the product what you want when those are
           connected.
         </p>
@@ -124,7 +124,7 @@ function NotificationAndDigestSettings() {
               onChange={(e) => setEmail(e.target.checked)}
               className="rounded border-zinc-500"
             />
-            Email digests (when Zapier / mail integration is configured)
+            Email digests (when SMTP is configured on the API)
           </label>
           <label className="flex items-center gap-3 text-sm text-zinc-700 dark:text-zinc-300">
             <input
@@ -344,7 +344,9 @@ type IntegrationStatus = {
   clerk_publishable?: boolean;
   clerk_secret?: boolean;
   alpaca?: boolean;
+  alert_webhook?: boolean;
   zapier_webhook?: boolean;
+  smtp_email?: boolean;
   twilio_sms?: boolean;
   twilio_account_sid?: boolean;
   twilio_auth_token?: boolean;
@@ -448,7 +450,8 @@ export function Settings() {
           <Badge ok={!!s.clerk_publishable} label="Clerk publishable" />
           <Badge ok={!!s.clerk_secret} label="Clerk secret" />
           <Badge ok={!!s.alpaca} label="Alpaca (paper)" />
-          <Badge ok={!!s.zapier_webhook} label="Zapier webhook" />
+          <Badge ok={!!(s.alert_webhook ?? s.zapier_webhook)} label="HTTP webhook (optional)" />
+          <Badge ok={!!s.smtp_email} label="SMTP email alerts" />
           <Badge ok={!!s.twilio_sms} label="Twilio SMS" />
         </div>
         {!s.twilio_sms && (

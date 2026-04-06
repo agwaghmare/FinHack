@@ -247,6 +247,28 @@ export const api = {
     }),
   alertSend: (payload: Record<string, unknown>) =>
     j("/alerts/send", { method: "POST", body: JSON.stringify(payload) }),
+  /** Webhook / SMS / email env status (no secrets). */
+  alertDelivery: () =>
+    j<{
+      webhook?: boolean;
+      sms?: boolean;
+      email?: boolean;
+      any_channel?: boolean;
+    }>("/alerts/delivery"),
+  /** Signed-in user: live risk signals (requires Clerk JWT). */
+  alertSignals: (opts?: { riskAlert?: number; concentration?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.riskAlert != null) q.set("risk_alert_threshold", String(opts.riskAlert));
+    if (opts?.concentration != null) q.set("concentration_threshold", String(opts.concentration));
+    const qs = q.toString();
+    return j(`/alerts/signals${qs ? `?${qs}` : ""}`);
+  },
+  /** Send full digest to configured channels (requires Clerk JWT). */
+  alertDigest: (body?: Record<string, unknown>) =>
+    j("/alerts/digest", {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
 };
 
 export async function postVoice(text: string): Promise<Blob> {

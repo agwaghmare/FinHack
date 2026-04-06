@@ -47,7 +47,7 @@ const groups = [
     hint: "Modules, quizzes, certificates, and an AI tutor for financial education & inclusion.",
     icon: BookOpen,
   },
-  { to: "/alerts", label: "Alerts Center", hint: "Risk, news, and webhook tests — your actionable signal inbox.", icon: BellRing },
+  { to: "/alerts", label: "Alerts Center", hint: "Risk signals with SMS, email, or an optional HTTP endpoint.", icon: BellRing },
 ];
 
 export function Sidebar({
