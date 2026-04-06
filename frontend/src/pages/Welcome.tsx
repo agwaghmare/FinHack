@@ -11,7 +11,7 @@ const tiers = [
     price: "Free",
     highlights: [
       "Market Pulse & Learn Hub (modules, quizzes)",
-      "AI tutor when Gemini/OpenAI keys are on the API",
+      "AI tutor powered by Mistral AI",
       "Transparent “not advice” framing for inclusion",
     ],
     cta: "Start free",
@@ -35,7 +35,7 @@ const tiers = [
     tagline: "Full AI layer for research velocity.",
     price: "$29/mo",
     highlights: [
-      "Gemini/OpenAI pipelines across Insights & Learn",
+      "Mistral AI pipelines across Insights & Learn",
       "Audio briefings (ElevenLabs when configured)",
       "Macro regime & advanced market context",
     ],
