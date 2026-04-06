@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 from backend.services.portfolio_service import analyze_portfolio
 from backend.services.regime_service import detect_regime
@@ -6,6 +6,7 @@ from backend.services.regime_service import detect_regime
 from backend.services.holdings_service import (
     add_or_merge_position,
     delete_position,
+    holdings_top_performers,
     portfolio_equity_curve,
     portfolio_period_performance,
     snapshot,
@@ -55,6 +56,20 @@ def holdings_performance(user_id: str):
 def holdings_equity_curve(user_id: str, period: str = "1y"):
     """Portfolio capital-growth curve from holdings."""
     return portfolio_equity_curve(user_id, period=period)
+
+
+@router.get("/holdings/{user_id}/top-performers")
+def holdings_top_performers_route(
+    user_id: str,
+    limit: int = Query(8, ge=1, le=25),
+    period: str = Query(
+        "ytd",
+        description="Return window: 1m, ytd, 1y, 5y (adjusted closes)",
+        pattern="^(1m|ytd|1y|5y)$",
+    ),
+):
+    """Holdings with positive return over the window, best first."""
+    return holdings_top_performers(user_id, limit=limit, period=period)
 
 
 @router.post("/holdings/{user_id}")

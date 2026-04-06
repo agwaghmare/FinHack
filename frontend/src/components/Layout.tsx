@@ -28,7 +28,7 @@ export function Layout() {
       <DigestReminder />
       <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((p) => !p)} />
       <main className={sidebarCollapsed ? "pl-20" : "pl-72"}>
-        <div className="mx-auto max-w-6xl px-8 py-10">
+        <div className="mx-auto w-full max-w-none px-3 py-10 sm:px-5 lg:px-8">
           <Outlet />
         </div>
       </main>

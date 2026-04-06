@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Gem, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
+import { MacroIndicatorCharts, type MacroHistoryPayload } from "../components/MacroIndicatorCharts";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
 
 type Quote = { kind?: string; symbol?: string; price?: number; error?: string; change_percent?: string };
@@ -18,9 +19,15 @@ type CrossAssetPayload = {
 };
 
 export function CommodityLens() {
-  const [macro, setMacro] = useState<{ cpi?: number; rates?: number; gdp?: number } | null>(
-    null,
-  );
+  const [macro, setMacro] = useState<{
+    cpi?: number;
+    rates?: number;
+    gdp?: number;
+    unemployment?: number;
+    pce?: number;
+  } | null>(null);
+  const [macroHistory, setMacroHistory] = useState<MacroHistoryPayload | null>(null);
+  const [macroHistoryLoading, setMacroHistoryLoading] = useState(true);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
   const [chainHeadline, setChainHeadline] = useState<string | null>(null);
@@ -32,20 +39,34 @@ export function CommodityLens() {
       try {
         // Macro (FRED) and prices (yfinance) are independent — a FRED key/network failure
         // must not wipe the commodity & FX grid.
-        const [m, px, cross] = await Promise.all([
+        const [m, px, cross, hist] = await Promise.all([
           api.marketMacro().catch(() => null),
           api.marketPrices("WTI,GLD,SLV,DBA,USO,SPY,EURUSD,USDJPY,GBPUSD").catch(() => ({
             quotes: [] as Quote[],
           })),
           api.marketCrossAsset().catch(() => null),
+          api.macroHistory(1).catch(() => null),
         ]);
         if (cancelled) return;
         if (m && typeof m === "object") {
-          const mm = m as { cpi?: number; rates?: number; gdp?: number };
-          setMacro({ cpi: mm.cpi, rates: mm.rates, gdp: mm.gdp });
+          const mm = m as {
+            cpi?: number;
+            rates?: number;
+            gdp?: number;
+            unemployment?: number;
+            pce?: number;
+          };
+          setMacro({
+            cpi: mm.cpi,
+            rates: mm.rates,
+            gdp: mm.gdp,
+            unemployment: mm.unemployment,
+            pce: mm.pce,
+          });
         } else {
           setMacro(null);
         }
+        setMacroHistory((hist as MacroHistoryPayload | null) ?? null);
         setQuotes((px as { quotes?: Quote[] }).quotes ?? []);
         const h = (cross as { headline?: string } | null)?.headline;
         setChainHeadline(typeof h === "string" ? h : null);
@@ -57,7 +78,10 @@ export function CommodityLens() {
           setCrossAsset(null);
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setMacroHistoryLoading(false);
+        }
       }
     })();
     return () => {
@@ -138,11 +162,13 @@ export function CommodityLens() {
         <p className="text-sm text-zinc-500">
           CPI, policy rates, and GDP anchor how energy and metals discount growth and inflation.
         </p>
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {[
             { label: "CPI (index)", value: macro?.cpi?.toFixed(1) ?? "—" },
             { label: "Fed funds %", value: macro?.rates?.toFixed(2) ?? "—" },
             { label: "GDP (Bil. $)", value: macro?.gdp?.toFixed(0) ?? "—" },
+            { label: "Unemployment %", value: macro?.unemployment?.toFixed(2) ?? "—" },
+            { label: "PCE (Bil. $)", value: macro?.pce?.toFixed(0) ?? "—" },
           ].map((x) => (
             <div key={x.label} className="glass rounded-2xl p-5">
               <div className="flex justify-between gap-2">
@@ -159,6 +185,18 @@ export function CommodityLens() {
             </div>
           ))}
         </div>
+      </section>
+
+      <section id="macro-trends" className="scroll-mt-24 space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Gem className="h-5 w-5 text-emerald-500/90" />
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-white">Macro trends (1 year)</h2>
+        </div>
+        <p className="text-sm text-zinc-500">
+          Same FRED indicators as above, shown as trailing one-year series. GDP is quarterly, CPI and
+          payroll-related series are monthly — axis spacing is calendar time, not uniform frequency.
+        </p>
+        <MacroIndicatorCharts data={macroHistory} loading={macroHistoryLoading} />
       </section>
 
       <section id="prices" className="scroll-mt-24 space-y-4">

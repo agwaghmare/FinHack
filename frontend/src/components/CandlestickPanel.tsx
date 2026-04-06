@@ -45,15 +45,15 @@ export function CandlestickPanel({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-zinc-100">
+        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           {sym} · candlesticks (mplfinance)
         </p>
         {!loaded && !err && (
           <span className="text-xs text-zinc-500">Loading chart…</span>
         )}
-        {err && <span className="text-xs text-amber-500">{err}</span>}
+        {err && <span className="text-xs text-amber-600 dark:text-amber-500">{err}</span>}
       </div>
-      <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/50">
+      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/50">
         <img
           src={src}
           alt={`${sym} OHLC candlestick chart`}
@@ -68,7 +68,7 @@ export function CandlestickPanel({
           }}
         />
       </div>
-      <p className="text-[11px] text-zinc-500">
+      <p className="text-[11px] text-zinc-500 dark:text-zinc-500">
         Yahoo Finance OHLC via yfinance, rendered with matplotlib + mplfinance on the server.
       </p>
     </div>

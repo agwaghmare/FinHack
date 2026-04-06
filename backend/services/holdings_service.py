@@ -326,19 +326,96 @@ def portfolio_period_performance(user_id: str) -> dict[str, Any]:
     keys = ("1m", "ytd", "1y", "5y")
     out: dict[str, float | None] = {}
     for k in keys:
-        acc = 0.0
-        ok = True
+        # MV-weight among symbols that have history for this horizon (IPO / thin data → None otherwise).
+        num = 0.0
+        den = 0.0
         for sym, w in weights.items():
             r = cache.get(sym, {}).get(k)
             if r is None:
-                ok = False
-                break
-            acc += w * r
-        out[k] = round(acc, 2) if ok else None
+                continue
+            num += w * float(r)
+            den += w
+        out[k] = round(num / den, 2) if den > 0 else None
 
     return {
         "has_positions": True,
         "periods": out,
+        "as_of": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def holdings_top_performers(
+    user_id: str,
+    *,
+    limit: int = 8,
+    period: str = "ytd",
+) -> dict[str, Any]:
+    """
+    Holdings with positive total return over the chosen window (adjusted closes), best first.
+    """
+    lim = int(min(max(limit, 1), 25))
+    per = period if period in ("1m", "ytd", "1y", "5y") else "ytd"
+    label_map = {"1m": "1 month", "ytd": "Year to date", "1y": "1 year", "5y": "5 years"}
+
+    snap = snapshot(user_id)
+    positions = [
+        p
+        for p in snap.get("positions") or []
+        if p.get("market_value") is not None and float(p.get("market_value") or 0) > 0
+    ]
+    if not positions:
+        return {
+            "has_positions": False,
+            "period": per,
+            "period_label": label_map[per],
+            "items": [],
+            "message": "Add priced positions under My portfolio to see top performers.",
+        }
+
+    total_mv = sum(float(p["market_value"]) for p in positions)
+    if total_mv <= 0:
+        return {
+            "has_positions": False,
+            "period": per,
+            "period_label": label_map[per],
+            "items": [],
+            "message": "No priced market value for holdings.",
+        }
+
+    rows: list[dict[str, Any]] = []
+    for p in positions:
+        sym = str(p["symbol"]).upper()
+        mv = float(p["market_value"])
+        rets = _symbol_period_returns_pct(sym)
+        rp = rets.get(per)
+        if rp is None:
+            continue
+        w_pct = (mv / total_mv) * 100.0
+        rows.append(
+            {
+                "symbol": sym,
+                "market_value": round(mv, 2),
+                "weight_pct": round(w_pct, 2),
+                "return_pct": round(float(rp), 2),
+                "period_return_label": per,
+            }
+        )
+
+    positive = [r for r in rows if r["return_pct"] > 0]
+    positive.sort(key=lambda x: x["return_pct"], reverse=True)
+    items = positive[:lim]
+
+    hint: str | None = None
+    if not items and rows:
+        hint = "No holdings are positive for this window yet (all flat or down on adjusted closes)."
+
+    return {
+        "has_positions": True,
+        "period": per,
+        "period_label": label_map[per],
+        "items": items,
+        "count_evaluated": len(rows),
+        "hint": hint,
         "as_of": datetime.now(timezone.utc).isoformat(),
     }
 

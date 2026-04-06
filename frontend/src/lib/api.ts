@@ -73,16 +73,38 @@ export const api = {
   /** Yahoo Finance day gainers (real movers). */
   marketMovers: (count = 8) =>
     j(`/market/movers?count=${encodeURIComponent(String(count))}`),
+  /** Earnings dates in the next N days (watchlist universe). */
+  marketEarningsWeek: (days = 7) =>
+    j(`/market/earnings-week?days=${encodeURIComponent(String(days))}`),
+  /** Approximate macro release calendar (FOMC, NFP, CPI, GDP). */
+  marketMacroEvents: (horizonDays = 90) =>
+    j(
+      `/market/macro-events?horizon_days=${encodeURIComponent(String(horizonDays))}`,
+    ),
+  /** Polymarket hot markets by 24h volume. */
+  marketPredictionMarkets: (limit = 8) =>
+    j(`/market/prediction-markets?limit=${encodeURIComponent(String(limit))}`),
   /** yfinance fundamentals + Clearbit logo */
   stockInfo: (symbol: string) =>
     j(`/market/stock-info?symbol=${encodeURIComponent(symbol)}`),
+  /** Same-sector, similar market-cap peers (equities); ETFs get index proxies */
+  marketPeerSuggest: (symbol: string, limit = 3) =>
+    j(
+      `/market/peer-suggest?symbol=${encodeURIComponent(symbol)}&limit=${encodeURIComponent(String(limit))}`,
+    ),
   marketNews: (symbol = "SPY", limit = 20) =>
     j(`/market/news?symbol=${encodeURIComponent(symbol)}&limit=${limit}`),
   marketPortfolio: (userId: string) =>
     j(`/market/portfolio/${encodeURIComponent(userId)}`),
   newsSentiment: (symbol: string, limit = 40) =>
     j(`/news/sentiment/${encodeURIComponent(symbol)}?limit=${limit}`),
+  /** Macro / sector / intl / geo / stock lanes with summaries — Market Pulse. */
+  narrativeDigest: (limit = 72) =>
+    j(`/news/narrative-digest?limit=${encodeURIComponent(String(limit))}`),
   macro: () => j("/macro/indicators"),
+  /** FRED time series for macro trend charts (default ~1y window). */
+  macroHistory: (years = 1) =>
+    j(`/macro/indicators/history?years=${encodeURIComponent(String(years))}`),
   portfolioAnalyze: (body: unknown) =>
     j("/portfolio/analyze", {
       method: "POST",
@@ -115,6 +137,15 @@ export const api = {
   portfolioEquityCurve: (userId: string, period = "1y") =>
     j(
       `/portfolio/holdings/${encodeURIComponent(userId)}/equity-curve?period=${encodeURIComponent(period)}`,
+    ),
+  /** Best positive holdings by period total return (adjusted closes). */
+  portfolioTopPerformers: (
+    userId: string,
+    period: "1m" | "ytd" | "1y" | "5y" = "ytd",
+    limit = 8,
+  ) =>
+    j(
+      `/portfolio/holdings/${encodeURIComponent(userId)}/top-performers?period=${encodeURIComponent(period)}&limit=${encodeURIComponent(String(limit))}`,
     ),
   insight: (data: unknown) =>
     j("/ai/insight", {

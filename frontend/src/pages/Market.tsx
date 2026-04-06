@@ -1,4 +1,4 @@
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import {
   Loader2,
   Mic,
@@ -35,11 +35,115 @@ type CompareRow = {
   symbol: string;
   longName?: string;
   sector?: string;
+  capBucket?: string | null;
   perf1m?: number | null;
   perf6m?: number | null;
   perf1y?: number | null;
   trend?: "up" | "down" | "flat";
+  trailingPe?: number | null;
+  trailingEps?: number | null;
+  recommendationMean?: number | null;
+  recommendationKey?: string | null;
+  analystCount?: number | null;
 };
+
+function capBucketFromMarketCap(mc: number | null | undefined): string | null {
+  if (mc == null || !Number.isFinite(mc) || mc <= 0) return null;
+  if (mc >= 200e9) return "Mega cap";
+  if (mc >= 10e9) return "Large cap";
+  if (mc >= 2e9) return "Mid cap";
+  return "Small cap";
+}
+
+function formatAnalystLabel(mean: number | null | undefined, key: string | null | undefined): string {
+  const k = key
+    ? key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+    : null;
+  if (mean != null && Number.isFinite(mean)) {
+    return k ? `${mean.toFixed(2)} · ${k}` : mean.toFixed(2);
+  }
+  return k ?? "—";
+}
+
+type NarrativeArticle = {
+  title: string;
+  summary: string;
+  url: string;
+  source: string;
+  time_published?: string;
+  sentiment_label?: string;
+};
+
+type NarrativeBuckets = {
+  macro: NarrativeArticle | null;
+  sector: NarrativeArticle | null;
+  international: NarrativeArticle | null;
+  geopolitical: NarrativeArticle | null;
+  two_names: NarrativeArticle[];
+};
+
+type EarningsWeekItem = {
+  symbol: string;
+  earnings_date: string;
+  within_days: number;
+};
+
+type MacroEventRow = {
+  id: string;
+  name: string;
+  date: string;
+  time_hint?: string;
+  category?: string;
+};
+
+type PredictionMarketRow = {
+  question: string;
+  url: string;
+  volume_24h: number;
+  yes_implied?: number | null;
+  end_date?: string;
+};
+
+function NarrativeLane({
+  title,
+  subtitle,
+  article,
+}: {
+  title: string;
+  subtitle: string;
+  article: NarrativeArticle | null;
+}) {
+  return (
+    <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500/90">{title}</p>
+      <p className="mt-0.5 text-[11px] text-zinc-500">{subtitle}</p>
+      {article ? (
+        <div className="mt-3 space-y-2">
+          <a
+            href={article.url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sm font-semibold leading-snug text-zinc-100 underline-offset-2 hover:text-emerald-300 hover:underline"
+          >
+            {article.title}
+          </a>
+          <p className="text-xs leading-relaxed text-zinc-400 line-clamp-6">{article.summary}</p>
+          <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
+            <span>{article.source}</span>
+            {article.time_published ? <span>· {article.time_published}</span> : null}
+            {article.sentiment_label ? (
+              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-400">{article.sentiment_label}</span>
+            ) : null}
+          </div>
+        </div>
+      ) : (
+        <p className="mt-3 text-xs text-zinc-500">
+          No headline matched this lane in the current feed. Refresh later or check the broader news pipeline.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function pctBetween(now: number, prev: number) {
   if (!Number.isFinite(now) || !Number.isFinite(prev) || prev <= 0) return null;
@@ -91,19 +195,6 @@ const MARKET_CAP_LEADERS = [
   "META",
   "TSLA",
   "BRK.B",
-];
-
-const MOVER_UNIVERSE = [
-  "NVDA",
-  "TSLA",
-  "AMD",
-  "NFLX",
-  "META",
-  "AAPL",
-  "MSFT",
-  "AMZN",
-  "COIN",
-  "PLTR",
 ];
 
 function CapLeaderCard({
@@ -209,53 +300,6 @@ function CapLeaderCard({
   );
 }
 
-function QuoteCard({ q }: { q: Quote }) {
-  const px =
-    typeof q.price === "number"
-      ? `$${q.price.toLocaleString(undefined, { maximumFractionDigits: 4 })}`
-      : "—";
-  const kind =
-    q.kind === "commodity"
-      ? "commodity"
-      : q.kind === "fx"
-        ? "fx"
-        : q.kind === "crypto"
-          ? "quote"
-          : "quote";
-
-  return (
-    <div className="glass rounded-2xl p-4 transition hover:-translate-y-0.5 hover:shadow-xl">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
-            {q.kind ?? "asset"}
-          </p>
-          <p className="mt-1 text-lg font-semibold text-zinc-900 dark:text-white">{q.symbol ?? "—"}</p>
-        </div>
-        <WhyMattersButton
-          label="Why?"
-          context={{
-            kind,
-            symbol: q.symbol ?? "",
-            label: q.symbol ?? "Instrument",
-            value: `${px}${q.change_percent != null && q.change_percent !== "" ? ` · ${q.change_percent}% session` : ""}`,
-            user_note: q.error ? "Quote may be delayed or fallback mock data." : "",
-          }}
-        />
-      </div>
-      <p className="mt-2 text-2xl font-semibold tabular-nums text-zinc-100">
-        {q.error ? "—" : px}
-      </p>
-      {q.change_percent != null && q.change_percent !== "" && (
-        <p className="mt-1 text-xs text-zinc-500">{q.change_percent}% day</p>
-      )}
-      {q.error && (
-        <p className="mt-1 text-[10px] text-amber-500">Using fallback market data</p>
-      )}
-    </div>
-  );
-}
-
 type PortfolioPerfPayload = {
   has_positions?: boolean;
   periods?: {
@@ -281,25 +325,34 @@ type PortfolioCurvePayload = {
   message?: string;
 };
 
+type TopPerformersPayload = {
+  has_positions?: boolean;
+  period?: string;
+  period_label?: string;
+  items?: Array<{
+    symbol: string;
+    market_value?: number;
+    weight_pct?: number;
+    return_pct: number;
+  }>;
+  hint?: string | null;
+  message?: string;
+};
+
 function fmtReturnPct(n: number | null | undefined) {
   if (n == null || Number.isNaN(n)) return "—";
   const sign = n >= 0 ? "+" : "";
   return `${sign}${n.toFixed(2)}%`;
 }
 
-function moverWhyText(q: Quote) {
-  const sym = q.symbol ?? "This stock";
-  const ch = Number.parseFloat(q.change_percent ?? "0");
-  const up = ch >= 0;
-  if (Math.abs(ch) >= 8) {
-    return `${sym} is making an outsized move; likely earnings/news or a major repricing event.`;
+function fmtIsoDateShort(iso: string) {
+  try {
+    const d = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  } catch {
+    return iso;
   }
-  if (Math.abs(ch) >= 4) {
-    return `${sym} is moving on notable momentum, sector sympathy, or fresh headlines today.`;
-  }
-  return up
-    ? `${sym} is up on broad risk-on flows and name-specific momentum signals.`
-    : `${sym} is down as sellers price in risk, weak guidance tone, or position unwinds.`;
 }
 
 function portfolioLinePoints(values: number[]) {
@@ -335,12 +388,16 @@ export function Market() {
   const [podcastBusy, setPodcastBusy] = useState(false);
   const [podcastCloseAt, setPodcastCloseAt] = useState<string | null>(null);
   const [podcastOpenAt, setPodcastOpenAt] = useState<string | null>(null);
-  const [expandedMover, setExpandedMover] = useState<string | null>(null);
   const [expandedLeader, setExpandedLeader] = useState<string | null>(null);
-  const [movers, setMovers] = useState<Quote[]>([]);
+  const [earningsItems, setEarningsItems] = useState<EarningsWeekItem[]>([]);
+  const [macroEvents, setMacroEvents] = useState<MacroEventRow[]>([]);
+  const [macroDisclaimer, setMacroDisclaimer] = useState<string | null>(null);
+  const [predictionMarkets, setPredictionMarkets] = useState<PredictionMarketRow[]>([]);
+  const [predictionDisclaimer, setPredictionDisclaimer] = useState<string | null>(null);
   const [capLeaders, setCapLeaders] = useState<Quote[]>([]);
   const [portfolioPerf, setPortfolioPerf] = useState<PortfolioPerfPayload | null>(null);
   const [portfolioCurve, setPortfolioCurve] = useState<PortfolioCurvePayload | null>(null);
+  const [topPerformers, setTopPerformers] = useState<TopPerformersPayload | null>(null);
   const [portfolioPerfLoading, setPortfolioPerfLoading] = useState(false);
   const [stockLookupInput, setStockLookupInput] = useState("");
   const [stockLookupOpen, setStockLookupOpen] = useState(false);
@@ -349,42 +406,66 @@ export function Market() {
   const [compareSymbols, setCompareSymbols] = useState<string[]>([]);
   const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
   const [compareLoading, setCompareLoading] = useState(false);
+  const [peerCompareMessage, setPeerCompareMessage] = useState<string | null>(null);
+  const [narrativeBuckets, setNarrativeBuckets] = useState<NarrativeBuckets | null>(null);
+  const [narrativeLoading, setNarrativeLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const [px, yahooMovers, moverBatch, capBatch] = await Promise.all([
-          api.marketPrices("SPY,QQQ,DIA,IWM,BTC,ETH"),
-          api.marketMovers(5).catch(() => null),
-          api.marketPrices(MOVER_UNIVERSE.join(",")),
+        const [px, earningsRaw, macroRaw, polyRaw, capBatch, narrativeRaw] = await Promise.all([
+          api.marketPrices("BTC,ETH"),
+          api.marketEarningsWeek(7).catch(() => null),
+          api.marketMacroEvents(90).catch(() => null),
+          api.marketPredictionMarkets(8).catch(() => null),
           api.marketPrices(MARKET_CAP_LEADERS.join(",")),
+          api.narrativeDigest(72).catch(() => null),
         ]);
         if (cancelled) return;
         const qlist = (px as { quotes?: Quote[] }).quotes ?? [];
         setQuotes(qlist);
-        const yq = (yahooMovers as { quotes?: Quote[] } | null)?.quotes?.filter((x) => !x.error) ?? [];
-        const moverRows =
-          yq.length > 0
-            ? yq.slice(0, 8)
-            : ((moverBatch as { quotes?: Quote[] }).quotes ?? [])
-                .filter((x) => !x.error)
-                .sort(
-                  (a, b) =>
-                    Math.abs(Number.parseFloat(b.change_percent ?? "0")) -
-                    Math.abs(Number.parseFloat(a.change_percent ?? "0")),
-                )
-                .slice(0, 5);
-        setMovers(moverRows);
+        const nb = (narrativeRaw as { buckets?: NarrativeBuckets } | null)?.buckets;
+        setNarrativeBuckets(
+          nb ?? {
+            macro: null,
+            sector: null,
+            international: null,
+            geopolitical: null,
+            two_names: [],
+          },
+        );
+        const earn = (earningsRaw as { items?: EarningsWeekItem[] } | null)?.items ?? [];
+        setEarningsItems(earn);
+        const ev = (macroRaw as { events?: MacroEventRow[]; disclaimer?: string } | null)?.events ?? [];
+        setMacroEvents(ev.slice(0, 12));
+        setMacroDisclaimer((macroRaw as { disclaimer?: string } | null)?.disclaimer ?? null);
+        const mk = (polyRaw as { markets?: PredictionMarketRow[]; disclaimer?: string } | null)?.markets ?? [];
+        setPredictionMarkets(mk);
+        setPredictionDisclaimer((polyRaw as { disclaimer?: string } | null)?.disclaimer ?? null);
         setCapLeaders(((capBatch as { quotes?: Quote[] }).quotes ?? []).slice(0, 8));
       } catch {
         if (!cancelled) {
           setQuotes([]);
-          setMovers([]);
+          setEarningsItems([]);
+          setMacroEvents([]);
+          setMacroDisclaimer(null);
+          setPredictionMarkets([]);
+          setPredictionDisclaimer(null);
           setCapLeaders([]);
+          setNarrativeBuckets({
+            macro: null,
+            sector: null,
+            international: null,
+            geopolitical: null,
+            two_names: [],
+          });
         }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setNarrativeLoading(false);
+        }
       }
     })();
     return () => {
@@ -396,6 +477,7 @@ export function Market() {
     if (!clerkLoaded || !user?.id) {
       setPortfolioPerf(null);
       setPortfolioCurve(null);
+      setTopPerformers(null);
       return;
     }
     let cancelled = false;
@@ -403,16 +485,19 @@ export function Market() {
     Promise.all([
       api.portfolioPerformance(user.id),
       api.portfolioEquityCurve(user.id, "1y"),
+      api.portfolioTopPerformers(user.id, "ytd", 8).catch(() => null),
     ])
-      .then(([perf, curve]) => {
+      .then(([perf, curve, top]) => {
         if (cancelled) return;
         setPortfolioPerf(perf as PortfolioPerfPayload);
         setPortfolioCurve(curve as PortfolioCurvePayload);
+        setTopPerformers((top as TopPerformersPayload | null) ?? null);
       })
       .catch(() => {
         if (!cancelled) {
           setPortfolioPerf(null);
           setPortfolioCurve(null);
+          setTopPerformers(null);
         }
       })
       .finally(() => {
@@ -435,7 +520,7 @@ export function Market() {
   useEffect(() => {
     if (!stockLookupOpen || !stockModalSymbol) return;
     const base = stockModalSymbol.trim().toUpperCase();
-    const chosen = compareSymbols.length > 0 ? compareSymbols : [base, "SPY"];
+    const chosen = compareSymbols.length > 0 ? compareSymbols : [base];
     let cancelled = false;
     setCompareLoading(true);
     (async () => {
@@ -446,17 +531,32 @@ export function Market() {
               api.stockInfo(sym).catch(() => ({})),
               api.marketHistory(sym, "1y", "1d").catch(() => ({})),
             ]);
-            const info = infoRaw as { long_name?: string; sector?: string };
+            const info = infoRaw as {
+              long_name?: string;
+              sector?: string;
+              market_cap?: number;
+              trailing_pe?: number;
+              trailing_eps?: number;
+              recommendation_mean?: number;
+              recommendation_key?: string;
+              number_of_analyst_opinions?: number;
+            };
             const hist = histRaw as { bars?: unknown[] };
             const perf = perfFromBars(hist.bars);
             return {
               symbol: sym,
               longName: info.long_name,
               sector: info.sector,
+              capBucket: capBucketFromMarketCap(info.market_cap),
               perf1m: barsPerf(hist.bars, 22) ?? perf.perf1m,
               perf6m: barsPerf(hist.bars, 126) ?? perf.perf6m,
               perf1y: barsPerf(hist.bars, 252) ?? perf.perf1y,
               trend: perf.trend,
+              trailingPe: info.trailing_pe ?? null,
+              trailingEps: info.trailing_eps ?? null,
+              recommendationMean: info.recommendation_mean ?? null,
+              recommendationKey: info.recommendation_key ?? null,
+              analystCount: info.number_of_analyst_opinions ?? null,
             } as CompareRow;
           }),
         );
@@ -527,27 +627,6 @@ export function Market() {
     }
   }, []);
 
-  const { etfQ, cryptoQ } = useMemo(() => {
-    const etf = new Set(["SPY", "QQQ", "DIA", "IWM"]);
-    const eq: Quote[] = [];
-    const cr: Quote[] = [];
-    for (const q of quotes) {
-      const sym = (q.symbol ?? "").toUpperCase();
-      const base = sym.replace(/\/USD.*/, "");
-      if (q.kind === "commodity" || sym.includes("WTI")) {
-        continue;
-      }
-      if (q.kind === "crypto" || base === "BTC" || base === "ETH") {
-        cr.push(q);
-        continue;
-      }
-      if (etf.has(base)) {
-        eq.push(q);
-      }
-    }
-    return { etfQ: eq, cryptoQ: cr };
-  }, [quotes]);
-
   async function playDashboardAudio() {
     setAudioBusy(true);
     try {
@@ -564,14 +643,31 @@ export function Market() {
     }
   }
 
-  function openStockLookupModal(e?: FormEvent) {
+  async function applyDefaultPeersForSymbol(s: string) {
+    try {
+      const res = (await api.marketPeerSuggest(s, 3)) as {
+        peers?: string[];
+        message?: string | null;
+      };
+      const peers = res.peers ?? [];
+      const list = [s, ...peers].slice(0, 4);
+      setCompareSymbols(list);
+      setCompareInput(list.join(","));
+      setPeerCompareMessage(res.message ?? null);
+    } catch {
+      setCompareSymbols([s, "SPY", "QQQ"]);
+      setCompareInput(`${s},SPY,QQQ`);
+      setPeerCompareMessage(null);
+    }
+  }
+
+  async function openStockLookupModal(e?: FormEvent) {
     e?.preventDefault();
     const s = stockLookupInput.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
     if (!s) return;
     setStockModalSymbol(s);
-    setCompareInput(`${s},SPY,QQQ`);
-    setCompareSymbols([s, "SPY", "QQQ"]);
     setStockLookupOpen(true);
+    await applyDefaultPeersForSymbol(s);
   }
 
   function applyComparisonSymbols() {
@@ -580,6 +676,7 @@ export function Market() {
       .map((x) => x.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, ""))
       .filter(Boolean);
     if (parsed.length === 0) return;
+    setPeerCompareMessage(null);
     setCompareSymbols(Array.from(new Set(parsed)).slice(0, 4));
   }
 
@@ -625,7 +722,7 @@ export function Market() {
   }
 
   return (
-    <div className="space-y-8">
+    <div className="w-full max-w-none space-y-8">
       <form
         onSubmit={openStockLookupModal}
         className="glass flex flex-wrap items-center gap-3 rounded-2xl p-4"
@@ -665,8 +762,8 @@ export function Market() {
             Live tape & sentiment
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Part of our <span className="text-zinc-400">research &amp; education</span> story: live tape for stocks,
-            crypto, and ETFs. CPI, Fed funds, and GDP on{" "}
+            Part of our <span className="text-zinc-400">research &amp; education</span> story: live tape for stocks
+            and crypto, narrative summaries by theme, and CPI / Fed / GDP on{" "}
             <Link className="text-zinc-300 underline underline-offset-2" to="/macro-regime">
               Macro Regime
             </Link>
@@ -723,7 +820,7 @@ export function Market() {
               <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Market close · 4:05pm ET</h3>
                 <p className="mt-2 text-xs text-zinc-500">
-                  Recap for movers, leaders, and sentiment.
+                  Recap for leaders, earnings, and sentiment.
                 </p>
                 <button
                   type="button"
@@ -748,14 +845,14 @@ export function Market() {
               <li><span className="font-medium text-zinc-300">International:</span> overseas or FX angle</li>
               <li><span className="font-medium text-zinc-300">Geopolitical:</span> policy/conflict impact</li>
               <li><span className="font-medium text-zinc-300">Two names:</span> single-stock catalysts</li>
-              <li><span className="font-medium text-zinc-300">Tape + sentiment:</span> movers and tone</li>
+              <li><span className="font-medium text-zinc-300">Tape + sentiment:</span> earnings window and tone</li>
             </ul>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <div className="glass rounded-2xl p-6">
+      <section className="grid gap-4 xl:grid-cols-2 xl:items-start">
+        <div id="portfolio" className="glass h-fit rounded-2xl p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <PieChart className="h-4 w-4 text-amber-400" />
@@ -828,7 +925,7 @@ export function Market() {
                     Equity curve (capital growth)
                   </p>
                   <div className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-2">
-                    <svg viewBox="0 0 320 120" className="h-32 w-full" role="img" aria-label="Portfolio line graph">
+                    <svg viewBox="0 0 320 120" className="h-44 w-full md:h-52" role="img" aria-label="Portfolio line graph">
                       <defs>
                         <linearGradient id="equityFill" x1="0" x2="0" y1="0" y2="1">
                           <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.28" />
@@ -910,6 +1007,42 @@ export function Market() {
                   </div>
                 </div>
               ) : null}
+              {topPerformers?.has_positions && (topPerformers.items?.length ?? 0) > 0 ? (
+                <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+                    Top holdings so far ({topPerformers.period_label ?? "Year to date"})
+                  </p>
+                  <p className="mt-1 text-[10px] text-zinc-600">
+                    Total return per ticker (Yahoo adjusted closes). Positive names only, ranked best to least.
+                  </p>
+                  <ul className="mt-3 divide-y divide-zinc-800/80">
+                    {(topPerformers.items ?? []).map((row) => (
+                      <li
+                        key={row.symbol}
+                        className="flex flex-wrap items-center justify-between gap-2 py-2.5 first:pt-0 last:pb-0"
+                      >
+                        <div className="min-w-0">
+                          <span className="font-semibold text-zinc-100">{row.symbol}</span>
+                          <p className="text-[10px] text-zinc-500">
+                            {row.weight_pct != null ? `${row.weight_pct.toFixed(1)}% of portfolio` : ""}
+                            {row.weight_pct != null && row.market_value != null ? " · " : ""}
+                            {row.market_value != null
+                              ? `$${row.market_value.toLocaleString(undefined, { maximumFractionDigits: 0 })} MV`
+                              : null}
+                          </p>
+                        </div>
+                        <span className="shrink-0 text-sm font-semibold tabular-nums text-emerald-400">
+                          +{row.return_pct.toFixed(2)}%
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : topPerformers?.has_positions && topPerformers.hint ? (
+                <p className="mt-5 rounded-xl border border-zinc-800/60 bg-zinc-950/30 px-4 py-3 text-xs text-zinc-500">
+                  {topPerformers.hint}
+                </p>
+              ) : null}
             </>
           ) : (
             <p className="mt-4 text-sm text-zinc-400">
@@ -919,77 +1052,95 @@ export function Market() {
           )}
         </div>
 
-        <section className="glass rounded-2xl p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Top market movers
-          </h2>
+        <section id="calendar" className="glass h-fit rounded-2xl p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Earnings this week</h2>
           <p className="mt-1 text-xs text-zinc-500">
-            Yahoo Finance · Day gainers. Tap a row for candlesticks, business summary, and valuation fields.
+            Reported dates from Yahoo calendar for major tech and index names (next 7 days). Tap a ticker for chart and
+            fundamentals.
           </p>
           <div className="mt-3 space-y-2 text-sm">
-            {movers.length === 0 ? (
-              <p className="text-zinc-500">Loading movers...</p>
+            {loading ? (
+              <p className="text-zinc-500">Loading earnings…</p>
+            ) : earningsItems.length === 0 ? (
+              <p className="text-zinc-500">
+                No earnings in the next week for the watchlist, or calendar data is unavailable.
+              </p>
             ) : (
-              movers.slice(0, 5).map((x) => {
-                const ch = Number.parseFloat(x.change_percent ?? "0");
-                const up = ch >= 0;
-                const sym = x.symbol ?? "";
-                const open = expandedMover === sym;
+              earningsItems.slice(0, 8).map((row) => {
+                const sym = row.symbol;
                 return (
-                  <div key={sym} className="rounded-lg border border-zinc-800/60 bg-zinc-900/40">
-                    <button
-                      type="button"
-                      className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left transition hover:bg-zinc-900/70"
-                      onClick={() => setExpandedMover((prev) => (prev === sym ? null : sym))}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <span className="font-semibold text-zinc-100">{sym}</span>
-                        {x.long_name ? (
-                          <p className="truncate text-[10px] text-zinc-500" title={x.long_name}>
-                            {x.long_name}
-                          </p>
-                        ) : null}
-                        <p className="mt-0.5 line-clamp-2 text-[11px] text-zinc-500">
-                          {x.why_today?.trim() || moverWhyText(x)}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-2 text-right">
-                        {typeof x.price === "number" ? (
-                          <span className="hidden text-xs text-zinc-500 sm:inline">
-                            ${x.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                          </span>
-                        ) : null}
-                        <span
-                          className={`tabular-nums font-semibold ${up ? "text-emerald-400" : "text-rose-400"}`}
-                        >
-                          {up ? "+" : ""}
-                          {x.change_percent ?? "0"}%
-                        </span>
-                        <span className="text-[10px] text-zinc-500">{open ? "▲" : "▼"}</span>
-                      </div>
-                    </button>
-                    {open && sym ? (
-                      <div className="border-t border-zinc-800/80 px-3 pb-4 pt-2">
-                        <StockInfoPanel symbol={sym} showChart chartPeriod="1y" />
-                      </div>
-                    ) : null}
-                  </div>
+                  <button
+                    key={`${sym}-${row.earnings_date}`}
+                    type="button"
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-zinc-800/60 bg-zinc-900/40 px-3 py-2 text-left transition hover:bg-zinc-900/70"
+                    onClick={() => {
+                      setStockModalSymbol(sym);
+                      setStockLookupOpen(true);
+                      void applyDefaultPeersForSymbol(sym);
+                    }}
+                  >
+                    <div className="min-w-0">
+                      <span className="font-semibold text-zinc-100">{sym}</span>
+                      <p className="mt-0.5 text-[11px] text-zinc-500">
+                        {row.within_days === 0 ? "Today" : `In ${row.within_days} day${row.within_days === 1 ? "" : "s"}`}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-xs tabular-nums text-zinc-300">
+                      {fmtIsoDateShort(row.earnings_date)}
+                    </span>
+                  </button>
                 );
               })
             )}
           </div>
+
+          <div className="mt-6 border-t border-zinc-800 pt-5">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Upcoming macro</h2>
+            <p className="mt-1 text-xs text-zinc-500">
+              Key US releases (approximate dates — verify on official calendars). FOMC, jobs Friday, CPI proxy, GDP
+              advance.
+            </p>
+            {macroDisclaimer ? (
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">{macroDisclaimer}</p>
+            ) : null}
+            <ul className="mt-3 space-y-2 text-sm">
+              {loading ? (
+                <li className="text-zinc-500">Loading macro calendar…</li>
+              ) : macroEvents.length === 0 ? (
+                <li className="text-zinc-500">No macro events in this horizon.</li>
+              ) : (
+                macroEvents.map((ev) => (
+                  <li
+                    key={ev.id}
+                    className="flex flex-col gap-0.5 rounded-lg border border-zinc-800/60 bg-zinc-900/30 px-3 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="font-medium text-zinc-200">{ev.name}</p>
+                      {ev.time_hint ? <p className="text-[11px] text-zinc-500">{ev.time_hint}</p> : null}
+                    </div>
+                    <div className="shrink-0 text-right text-xs text-zinc-400">
+                      <p className="tabular-nums">{fmtIsoDateShort(ev.date)}</p>
+                      {ev.category ? (
+                        <p className="mt-0.5 text-[10px] uppercase tracking-wide text-zinc-600">{ev.category}</p>
+                      ) : null}
+                    </div>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
         </section>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2">
-        <section className="glass rounded-2xl p-5">
+      <section className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3 xl:items-start 2xl:items-start">
+        <section className="glass h-fit rounded-2xl p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Market-cap weighted leaders
           </h2>
           <p className="mt-2 text-sm text-zinc-400">
             Largest-cap names often drive index direction. Track these stocks first during high-volume sessions.
           </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-2">
             {capLeaders.map((q, i) => (
               <CapLeaderCard
                 key={`cap-${q.symbol}-${i}`}
@@ -1008,14 +1159,123 @@ export function Market() {
           ) : null}
         </section>
 
-        <section id="etfs" className="glass scroll-mt-24 rounded-2xl p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">ETFs & indices</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {etfQ.map((q, i) => (
-              <QuoteCard key={`etf-${q.symbol}-${i}`} q={q} />
-            ))}
-            {etfQ.length === 0 && !loading && (
-              <p className="col-span-full text-sm text-zinc-500">No ETF quotes yet.</p>
+        <section id="narrative-digest" className="glass h-fit scroll-mt-24 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Narrative snapshot</h2>
+          <p className="mt-2 text-sm text-zinc-400">
+            One summary per lane from the live headline feed (keyword buckets — not editorial ranking). Open links for
+            full articles.
+          </p>
+          {narrativeLoading && (
+            <p className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+              <Loader2 className="h-4 w-4 animate-spin" /> Loading narrative lanes…
+            </p>
+          )}
+          {!narrativeLoading && narrativeBuckets && (
+            <div className="mt-4 space-y-4">
+              <NarrativeLane
+                title="Macro"
+                subtitle="Broad macro: Fed, inflation, growth, rates, labor."
+                article={narrativeBuckets.macro}
+              />
+              <NarrativeLane
+                title="Sector"
+                subtitle="One industry or theme update (banks, chips, energy, etc.)."
+                article={narrativeBuckets.sector}
+              />
+              <NarrativeLane
+                title="International"
+                subtitle="Overseas or FX angle: regions, central banks, cross-border."
+                article={narrativeBuckets.international}
+              />
+              <NarrativeLane
+                title="Geopolitical"
+                subtitle="Policy, conflict, sanctions, defense — market-relevant headlines."
+                article={narrativeBuckets.geopolitical}
+              />
+              <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500/90">Two names</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">
+                  Single-stock catalysts (earnings, guidance, major tech names).
+                </p>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  {narrativeBuckets.two_names.length === 0 ? (
+                    <p className="text-xs text-zinc-500 sm:col-span-2">
+                      No stock-specific catalysts matched in this pull.
+                    </p>
+                  ) : (
+                    narrativeBuckets.two_names.slice(0, 2).map((a, i) => (
+                      <div key={`${a.url}-${i}`} className="rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-3">
+                        <a
+                          href={a.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm font-semibold leading-snug text-zinc-100 underline-offset-2 hover:text-amber-200/90 hover:underline"
+                        >
+                          {a.title}
+                        </a>
+                        <p className="mt-2 text-xs leading-relaxed text-zinc-400 line-clamp-5">{a.summary}</p>
+                        <p className="mt-2 text-[10px] text-zinc-500">
+                          {a.source}
+                          {a.time_published ? ` · ${a.time_published}` : ""}
+                        </p>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section
+          id="prediction-markets"
+          className="glass h-fit scroll-mt-24 space-y-3 rounded-2xl p-5 xl:col-span-2 2xl:col-span-1"
+        >
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+            Hottest prediction markets
+          </h2>
+          <p className="text-xs text-zinc-500">
+            Polymarket by 24h volume. Links open on polymarket.com.
+          </p>
+          {predictionDisclaimer ? (
+            <p className="text-[10px] leading-relaxed text-zinc-600">{predictionDisclaimer}</p>
+          ) : null}
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-2 2xl:grid-cols-1">
+            {loading ? (
+              <p className="col-span-full flex items-center gap-2 text-sm text-zinc-500">
+                <Loader2 className="h-4 w-4 animate-spin" /> Loading markets…
+              </p>
+            ) : predictionMarkets.length === 0 ? (
+              <p className="col-span-full text-sm text-zinc-500">
+                No prediction markets loaded (Polymarket API may be unreachable).
+              </p>
+            ) : (
+              predictionMarkets.map((m, i) => (
+                <a
+                  key={`${m.url}-${i}`}
+                  href={m.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="glass block rounded-xl p-3 transition hover:-translate-y-0.5 hover:shadow-xl 2xl:max-w-none"
+                >
+                  <p className="line-clamp-3 text-xs font-semibold leading-snug text-zinc-100">{m.question}</p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-500">
+                    <span>
+                      Vol:{" "}
+                      <span className="tabular-nums text-zinc-300">
+                        {m.volume_24h >= 1e6
+                          ? `$${(m.volume_24h / 1e6).toFixed(2)}M`
+                          : `$${(m.volume_24h / 1e3).toFixed(0)}k`}
+                      </span>
+                    </span>
+                    {m.yes_implied != null ? (
+                      <span className="tabular-nums text-amber-400/90">
+                        Yes {(m.yes_implied * 100).toFixed(0)}%
+                      </span>
+                    ) : null}
+                  </div>
+                </a>
+              ))
             )}
           </div>
         </section>
@@ -1033,21 +1293,7 @@ export function Market() {
         </div>
       )}
 
-      {audioUrl && (
-        <audio controls src={audioUrl} className="w-full max-w-md" />
-      )}
-
-      <section id="crypto" className="scroll-mt-24 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Crypto</h2>
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          {cryptoQ.map((q, i) => (
-            <QuoteCard key={`c-${q.symbol}-${i}`} q={q} />
-          ))}
-          {cryptoQ.length === 0 && !loading && (
-            <p className="col-span-full text-sm text-zinc-500">No crypto quotes yet.</p>
-          )}
-        </div>
-      </section>
+      {audioUrl && <audio controls src={audioUrl} className="w-full max-w-md" />}
 
       {stockLookupOpen && stockModalSymbol ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
@@ -1057,7 +1303,7 @@ export function Market() {
             aria-label="Close"
             onClick={() => setStockLookupOpen(false)}
           />
-          <div className="relative z-10 max-h-[min(90vh,900px)] w-full max-w-2xl overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950 p-6 shadow-2xl">
+          <div className="relative z-10 max-h-[min(90vh,900px)] w-full max-w-5xl overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950 p-6 shadow-2xl">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-zinc-100">{stockModalSymbol}</h2>
               <button
@@ -1075,14 +1321,19 @@ export function Market() {
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
                   Sector + performance comparison
                 </h3>
-                <span className="text-[11px] text-zinc-500">Compare multiple securities side by side</span>
+                <span className="text-[11px] text-zinc-500">
+                  Stocks default to same-sector, similar market-cap peers (not broad index ETFs)
+                </span>
               </div>
+              {peerCompareMessage ? (
+                <p className="mt-2 text-[11px] leading-relaxed text-zinc-500">{peerCompareMessage}</p>
+              ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <input
                   className="min-w-[14rem] flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs uppercase text-zinc-100"
                   value={compareInput}
                   onChange={(e) => setCompareInput(e.target.value)}
-                  placeholder="e.g. NVDA,AMD,QQQ"
+                  placeholder="e.g. NVDA,AMD,INTC"
                 />
                 <button
                   type="button"
@@ -1097,17 +1348,48 @@ export function Market() {
                   <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading comparison…
                 </p>
               ) : (
-                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {compareRows.map((r) => {
                     const trendClass =
                       r.trend === "up" ? "text-emerald-400" : r.trend === "down" ? "text-rose-400" : "text-zinc-400";
                     const fmt = (n: number | null | undefined) =>
                       n == null ? "—" : `${n >= 0 ? "+" : ""}${n.toFixed(1)}%`;
+                    const pe =
+                      r.trailingPe != null && Number.isFinite(r.trailingPe)
+                        ? r.trailingPe.toFixed(1)
+                        : "—";
+                    const eps =
+                      r.trailingEps != null && Number.isFinite(r.trailingEps)
+                        ? r.trailingEps.toFixed(2)
+                        : "—";
+                    const analyst = formatAnalystLabel(r.recommendationMean, r.recommendationKey);
                     return (
                       <div key={r.symbol} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
                         <p className="text-base font-semibold text-zinc-100">{r.symbol}</p>
-                        <p className="mt-0.5 text-[11px] text-zinc-500">{r.longName ?? "—"}</p>
-                        <p className="mt-1 text-xs text-zinc-400">Sector: {r.sector ?? "Unknown"}</p>
+                        <p className="mt-0.5 text-[11px] text-zinc-500 line-clamp-2">{r.longName ?? "—"}</p>
+                        <p className="mt-1 text-xs text-zinc-400">
+                          Sector: {r.sector ?? "Unknown"}
+                          {r.capBucket ? (
+                            <span className="text-zinc-500"> · {r.capBucket}</span>
+                          ) : null}
+                        </p>
+                        <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+                          <div className="rounded bg-zinc-900/80 px-2 py-1.5">
+                            <p className="text-[10px] text-zinc-500">P/E (TTM)</p>
+                            <p className="font-semibold tabular-nums text-zinc-200">{pe}</p>
+                          </div>
+                          <div className="rounded bg-zinc-900/80 px-2 py-1.5">
+                            <p className="text-[10px] text-zinc-500">EPS (TTM)</p>
+                            <p className="font-semibold tabular-nums text-zinc-200">{eps}</p>
+                          </div>
+                        </div>
+                        <p className="mt-2 text-[11px] text-zinc-400">
+                          <span className="text-zinc-500">Analyst (Yahoo): </span>
+                          <span className="text-zinc-200">{analyst}</span>
+                          {r.analystCount != null && r.analystCount > 0 ? (
+                            <span className="text-zinc-600"> ({r.analystCount} opinions)</span>
+                          ) : null}
+                        </p>
                         <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
                           <div className="rounded bg-zinc-900 p-1.5">
                             <p className="text-[10px] text-zinc-500">1M</p>

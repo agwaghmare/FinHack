@@ -520,6 +520,10 @@ def get_stock_fundamentals(symbol: str) -> dict[str, Any]:
         "trailing_eps": info.get("trailingEps"),
         "profit_margins": info.get("profitMargins"),
         "market_cap": info.get("marketCap"),
+        "quote_type": info.get("quoteType"),
+        "recommendation_mean": info.get("recommendationMean"),
+        "recommendation_key": info.get("recommendationKey"),
+        "number_of_analyst_opinions": info.get("numberOfAnalystOpinions"),
         "website": website or None,
         "logo_url": logo_url,
     }

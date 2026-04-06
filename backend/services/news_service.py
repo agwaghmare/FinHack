@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import re
 from datetime import datetime, timezone
+from typing import Any
 
 import requests
 
@@ -210,8 +211,9 @@ def _article_from_yfinance_row(item: dict, *, ticker: str) -> dict | None:
             link = quote_news
         summary = (content.get("summary") or content.get("description") or "").strip()
         pub = (content.get("pubDate") or content.get("displayTime") or "").strip()
-        provider = content.get("provider") if isinstance(content.get("provider"), dict) else {}
-        publisher = (provider.get("displayName") or "Yahoo Finance").strip() or "Yahoo Finance"
+        pr = content.get("provider")
+        provider: dict = pr if isinstance(pr, dict) else {}
+        publisher = (str(provider.get("displayName") or "Yahoo Finance")).strip() or "Yahoo Finance"
         return {
             "title": title,
             "url": link,
@@ -462,6 +464,77 @@ def get_multi_ticker_news(limit: int = 40) -> dict:
     return get_news_sentiment(tickers, limit=limit)
 
 
+def _article_digest_slice(a: dict) -> dict[str, Any]:
+    title = (a.get("title") or "").strip() or "Untitled"
+    summary = (a.get("summary") or "").strip()
+    if len(summary) > 1200:
+        summary = summary[:1197] + "…"
+    return {
+        "title": title,
+        "summary": summary or title,
+        "url": (a.get("url") or "#").strip(),
+        "source": (a.get("source") or "").strip() or "News",
+        "time_published": (a.get("time_published") or "").strip(),
+        "sentiment_label": a.get("overall_sentiment_label"),
+    }
+
+
+def get_narrative_digest(limit: int = 72) -> dict[str, Any]:
+    """
+    One curated story per narrative lane for dashboards (Market Pulse).
+    Buckets: macro, sector, international, geopolitical, two_names (0–2 stock catalysts).
+    """
+    base = get_multi_ticker_news(limit=min(max(limit, 20), 100))
+    articles: list[dict] = list(base.get("articles") or [])
+
+    macro: dict | None = None
+    sector: dict | None = None
+    international: dict | None = None
+    geopolitical: dict | None = None
+    two_names: list[dict] = []
+
+    used: set[str] = set()
+
+    def key_url(a: dict) -> str:
+        u = ((a.get("url") or "").split("?")[0]).lower().strip()
+        if u and u != "#":
+            return u
+        return (a.get("title") or "").lower().strip()[:160]
+
+    for a in articles:
+        k = key_url(a)
+        if k in used:
+            continue
+        b = categorize_article_bucket(a)
+        if b == "macro" and macro is None:
+            macro = _article_digest_slice(a)
+            used.add(k)
+        elif b == "sector" and sector is None:
+            sector = _article_digest_slice(a)
+            used.add(k)
+        elif b == "intl" and international is None:
+            international = _article_digest_slice(a)
+            used.add(k)
+        elif b == "geo" and geopolitical is None:
+            geopolitical = _article_digest_slice(a)
+            used.add(k)
+        elif b == "stock" and len(two_names) < 2:
+            two_names.append(_article_digest_slice(a))
+            used.add(k)
+
+    return {
+        "buckets": {
+            "macro": macro,
+            "sector": sector,
+            "international": international,
+            "geopolitical": geopolitical,
+            "two_names": two_names,
+        },
+        "pipeline": base.get("pipeline"),
+        "article_count": len(articles),
+    }
+
+
 def categorize_article_bucket(article: dict) -> str | None:
     """Assign one narrative bucket: geo, macro, intl, sector, stock."""
     t = f"{article.get('title') or ''} {article.get('summary') or ''}".lower()
@@ -505,6 +578,8 @@ def categorize_article_bucket(article: dict) -> str | None:
         "japan",
         "emerging",
         "currency",
+        "forex",
+        "fx ",
         "yen",
         "euro",
         "ecb",
@@ -512,6 +587,8 @@ def categorize_article_bucket(article: dict) -> str | None:
         "international",
         "foreign",
         "trade deal",
+        "overseas",
+        "dollar index",
     )
     if any(k in t for k in intl_kw):
         return "intl"

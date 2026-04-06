@@ -23,6 +23,10 @@ from backend.services.market_podcast_service import (
     get_latest_podcast_audio,
     get_latest_podcast_script,
 )
+from backend.services.earnings_week_service import get_earnings_this_week
+from backend.services.macro_events_service import get_upcoming_macro_events
+from backend.services.prediction_markets_service import get_hot_polymarket_markets
+from backend.services.peer_suggest_service import suggest_sector_peers
 
 router = APIRouter()
 
@@ -40,12 +44,45 @@ def market_stock_info(symbol: str = Query(..., min_length=1, max_length=32, desc
     return get_stock_fundamentals(symbol)
 
 
+@router.get("/peer-suggest")
+def market_peer_suggest(
+    symbol: str = Query(..., min_length=1, max_length=32, description="Anchor ticker e.g. AAPL"),
+    limit: int = Query(3, ge=1, le=8),
+):
+    """Same-sector, similar market-cap peers for equity comparison (not index ETFs)."""
+    return suggest_sector_peers(symbol, limit=limit)
+
+
 @router.get("/movers")
 def market_movers(
     count: int = Query(8, ge=1, le=25, description="Number of day gainers from Yahoo screener"),
 ):
     """Top percentage gainers (US) — same list Yahoo shows under Day Gainers."""
     return get_yahoo_day_movers(count)
+
+
+@router.get("/earnings-week")
+def market_earnings_week(
+    days: int = Query(7, ge=1, le=21, description="Rolling window from today (inclusive)"),
+):
+    """Upcoming earnings in the watchlist universe (yfinance calendar)."""
+    return get_earnings_this_week(days=days)
+
+
+@router.get("/macro-events")
+def market_macro_events(
+    horizon_days: int = Query(90, ge=14, le=400, description="How far ahead to list events"),
+):
+    """Approximate US macro calendar (FOMC, jobs, CPI proxy, GDP) — planning aid."""
+    return get_upcoming_macro_events(horizon_days=horizon_days)
+
+
+@router.get("/prediction-markets")
+def market_prediction_markets(
+    limit: int = Query(8, ge=3, le=20, description="Polymarket markets by 24h volume"),
+):
+    """High-activity Polymarket markets (Gamma API)."""
+    return get_hot_polymarket_markets(limit=limit)
 
 
 @router.get("/prices")

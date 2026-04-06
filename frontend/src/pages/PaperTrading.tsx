@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import { Loader2, Search, TrendingDown, TrendingUp } from "lucide-react";
 import { api } from "../lib/api";
 import { ClerkUserGate } from "../components/ClerkUserGate";
+import { CandlestickPanel } from "../components/CandlestickPanel";
 import {
   MistralFormattedText,
   MistralInsightPanel,
@@ -283,6 +284,24 @@ function PaperTradingContent({ userId }: { userId: string }) {
           </p>
         </div>
       </div>
+
+      <section id="paper-chart" className="glass scroll-mt-24 rounded-2xl p-6">
+        <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">
+          Candlestick chart · {(symbol.trim() || "SPY").toUpperCase()}
+        </h2>
+        <p className="mt-1 max-w-2xl text-xs text-zinc-500">
+          Updates when you change the symbol in the trade desk. Daily candles over the last year
+          (Yahoo Finance OHLC, rendered on the API).
+        </p>
+        <div className="mt-4">
+          <CandlestickPanel
+            key={(symbol.trim() || "SPY").toUpperCase()}
+            symbol={(symbol.trim() || "SPY").toUpperCase()}
+            period="1y"
+            interval="1d"
+          />
+        </div>
+      </section>
 
       <div id="leaderboard" className="glass scroll-mt-24 rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Leaderboard</h2>
