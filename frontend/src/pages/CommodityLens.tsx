@@ -1,22 +1,51 @@
 import { useEffect, useState } from "react";
-import { Gem, Loader2 } from "lucide-react";
+import { Gem, Loader2, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../lib/api";
 import { MacroIndicatorCharts, type MacroHistoryPayload } from "../components/MacroIndicatorCharts";
 import { WhyMattersButton } from "../components/WhyMattersSheet";
 
 type Quote = { kind?: string; symbol?: string; price?: number; error?: string; change_percent?: string };
-type CrossAssetPayload = {
-  headline?: string;
-  ai_narrative?: string;
-  chains?: {
-    id?: string;
-    title?: string;
-    when?: string;
-    plain?: string;
-    links?: { from?: string; direction?: string; to?: string; note?: string }[];
-  }[];
+
+type RegimePayload = {
+  regime?: string;
+  confidence_pct?: number;
+  narrative?: string;
+  hmm_regime?: string;
+  hmm_confidence?: number;
+  rules_regime?: string;
+  rules_confidence?: number;
+  avg_vix?: number | null;
+  fed_rate?: number | null;
+  cpi?: number | null;
+  unemployment?: number | null;
 };
+
+type MacroEventRow = {
+  id: string;
+  name: string;
+  date: string;
+  time_hint?: string;
+  category?: string;
+};
+
+function fmtIsoDateShort(iso: string) {
+  try {
+    const d = new Date(iso.includes("T") ? iso : `${iso}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  } catch {
+    return iso;
+  }
+}
+
+function regimeAccent(regime: string | undefined) {
+  const r = (regime ?? "").toLowerCase();
+  if (r.includes("bull")) return "text-emerald-400 border-emerald-500/40 bg-emerald-950/30";
+  if (r.includes("bear")) return "text-rose-400 border-rose-500/40 bg-rose-950/30";
+  if (r.includes("side")) return "text-zinc-300 border-zinc-600 bg-zinc-900/50";
+  return "text-amber-400 border-amber-500/35 bg-amber-950/25";
+}
 
 export function CommodityLens() {
   const [macro, setMacro] = useState<{
@@ -30,24 +59,36 @@ export function CommodityLens() {
   const [macroHistoryLoading, setMacroHistoryLoading] = useState(true);
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const [loading, setLoading] = useState(true);
-  const [chainHeadline, setChainHeadline] = useState<string | null>(null);
-  const [crossAsset, setCrossAsset] = useState<CrossAssetPayload | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [snapshotRefreshing, setSnapshotRefreshing] = useState(false);
+  const [regime, setRegime] = useState<RegimePayload | null>(null);
+  const [regimeErr, setRegimeErr] = useState<string | null>(null);
+  const [macroCalendar, setMacroCalendar] = useState<MacroEventRow[]>([]);
+  const [calendarDisclaimer, setCalendarDisclaimer] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    const initial = refreshKey === 0;
+    if (!initial) {
+      setSnapshotRefreshing(true);
+      setMacroHistoryLoading(true);
+    }
     (async () => {
       try {
-        // Macro (FRED) and prices (yfinance) are independent — a FRED key/network failure
-        // must not wipe the commodity & FX grid.
-        const [m, px, cross, hist] = await Promise.all([
+        const [m, px, hist, regRaw, calRaw] = await Promise.all([
           api.marketMacro().catch(() => null),
           api.marketPrices("WTI,GLD,SLV,DBA,USO,SPY,EURUSD,USDJPY,GBPUSD").catch(() => ({
             quotes: [] as Quote[],
           })),
-          api.marketCrossAsset().catch(() => null),
           api.macroHistory(1).catch(() => null),
+          api.portfolioRegime().catch((e: Error) => {
+            setRegimeErr(e.message);
+            return null;
+          }),
+          api.marketMacroEvents(75).catch(() => null),
         ]);
         if (cancelled) return;
+        if (regRaw) setRegimeErr(null);
         if (m && typeof m === "object") {
           const mm = m as {
             cpi?: number;
@@ -68,26 +109,29 @@ export function CommodityLens() {
         }
         setMacroHistory((hist as MacroHistoryPayload | null) ?? null);
         setQuotes((px as { quotes?: Quote[] }).quotes ?? []);
-        const h = (cross as { headline?: string } | null)?.headline;
-        setChainHeadline(typeof h === "string" ? h : null);
-        setCrossAsset((cross as CrossAssetPayload | null) ?? null);
+        setRegime((regRaw as RegimePayload | null) ?? null);
+        const ev = (calRaw as { events?: MacroEventRow[]; disclaimer?: string } | null)?.events ?? [];
+        setMacroCalendar(ev.slice(0, 10));
+        setCalendarDisclaimer((calRaw as { disclaimer?: string } | null)?.disclaimer ?? null);
       } catch {
         if (!cancelled) {
           setMacro(null);
           setQuotes([]);
-          setCrossAsset(null);
+          setRegime(null);
+          setMacroCalendar([]);
         }
       } finally {
         if (!cancelled) {
           setLoading(false);
           setMacroHistoryLoading(false);
+          setSnapshotRefreshing(false);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
@@ -97,6 +141,10 @@ export function CommodityLens() {
       );
     }
   }, []);
+
+  function refreshSnapshot() {
+    setRefreshKey((k) => k + 1);
+  }
 
   return (
     <div className="space-y-10">
@@ -124,33 +172,112 @@ export function CommodityLens() {
         </div>
       )}
 
-      <section className="glass scroll-mt-24 rounded-2xl p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Gem className="h-4 w-4 text-amber-400" />
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Chain reactions</h2>
-          <WhyMattersButton
-            label="Explain"
-            context={{
-              kind: "chain",
-              label: "Oil ↓ → ethanol ↔ corn/soy",
-              value: chainHeadline ?? "",
-              user_note:
-                "Oil decline can change ethanol blending incentives; ag prices also have their own supply shocks.",
-            }}
-          />
+      <section id="live-regime" className="glass scroll-mt-24 rounded-2xl p-5 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Gem className="h-4 w-4 text-amber-400" />
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Live snapshot</h2>
+            <span className="text-[10px] text-zinc-600">
+              Regime model + calendar refresh from the API (not static copy).
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={refreshSnapshot}
+            disabled={snapshotRefreshing}
+            className="inline-flex items-center gap-2 rounded-lg border border-zinc-700 bg-zinc-900/60 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:bg-zinc-800 disabled:opacity-50"
+          >
+            {snapshotRefreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+            Refresh
+          </button>
         </div>
-        <p className="mt-2 text-xs leading-relaxed text-zinc-400">
-          {chainHeadline ??
-            "Example: oil down → ethanol economics shift → corn and soy complex reprices; fertilizer and logistics can amplify soy even when crude is soft."}
-        </p>
-        <div className="mt-3 grid gap-2 lg:grid-cols-2">
-          {(crossAsset?.chains ?? []).slice(0, 4).map((ch) => (
-            <div key={ch.id ?? ch.title} className="rounded-lg border border-zinc-800 bg-zinc-950/40 p-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500/90">{ch.title}</p>
-              <p className="mt-1 text-[10px] text-zinc-500">{ch.when}</p>
-              <p className="mt-2 text-xs text-zinc-400 line-clamp-3">{ch.plain}</p>
-            </div>
-          ))}
+
+        <div className="mt-5 grid gap-6 lg:grid-cols-2">
+          <div className="space-y-4">
+            {regimeErr ? (
+              <p className="text-sm text-amber-500/90">{regimeErr}</p>
+            ) : regime?.regime ? (
+              <>
+                <div className="flex flex-wrap items-end gap-3">
+                  <span
+                    className={`inline-flex rounded-xl border px-4 py-2 text-lg font-semibold capitalize tracking-tight ${regimeAccent(regime.regime)}`}
+                  >
+                    {regime.regime.replace(/-/g, " ")}
+                  </span>
+                  {typeof regime.confidence_pct === "number" ? (
+                    <span className="text-sm text-zinc-500">
+                      Confidence ~{regime.confidence_pct}%
+                    </span>
+                  ) : null}
+                </div>
+                {regime.narrative ? (
+                  <p className="text-sm leading-relaxed text-zinc-300">{regime.narrative}</p>
+                ) : (
+                  <p className="text-xs text-zinc-500">
+                    Narrative appears when <code className="rounded bg-zinc-800 px-1">MISTRAL_API_KEY</code> is set on
+                    the API.
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1.5">
+                    <span className="text-zinc-500">HMM</span>
+                    <p className="font-medium text-zinc-200">
+                      {regime.hmm_regime ?? "—"}
+                      {typeof regime.hmm_confidence === "number" ? ` · ${regime.hmm_confidence}%` : ""}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1.5">
+                    <span className="text-zinc-500">Rules</span>
+                    <p className="font-medium text-zinc-200">
+                      {regime.rules_regime ?? "—"}
+                      {typeof regime.rules_confidence === "number" ? ` · ${regime.rules_confidence}%` : ""}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1.5">
+                    <span className="text-zinc-500">VIX (avg)</span>
+                    <p className="font-medium tabular-nums text-zinc-200">
+                      {regime.avg_vix != null ? regime.avg_vix.toFixed(1) : "—"}
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-zinc-500">Regime data unavailable right now.</p>
+            )}
+          </div>
+
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">Upcoming releases</p>
+            <p className="mt-1 text-xs text-zinc-600">
+              Approximate US macro dates — verify on official calendars.
+            </p>
+            {calendarDisclaimer ? (
+              <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">{calendarDisclaimer}</p>
+            ) : null}
+            <ul className="mt-3 max-h-[min(22rem,55vh)] space-y-2 overflow-y-auto pr-1">
+              {macroCalendar.length === 0 ? (
+                <li className="text-sm text-zinc-500">No calendar rows returned.</li>
+              ) : (
+                macroCalendar.map((ev) => (
+                  <li
+                    key={ev.id}
+                    className="flex flex-col gap-0.5 rounded-lg border border-zinc-800/80 bg-zinc-950/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-zinc-200">{ev.name}</p>
+                      {ev.time_hint ? <p className="text-[11px] text-zinc-500">{ev.time_hint}</p> : null}
+                    </div>
+                    <div className="shrink-0 text-right text-xs text-zinc-400">
+                      <p className="tabular-nums">{fmtIsoDateShort(ev.date)}</p>
+                      {ev.category ? (
+                        <p className="mt-0.5 text-[10px] uppercase tracking-wide text-zinc-600">{ev.category}</p>
+                      ) : null}
+                    </div>
+                  </li>
+                ))
+              )}
+            </ul>
+          </div>
         </div>
       </section>
 

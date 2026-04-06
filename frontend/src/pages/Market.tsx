@@ -1,12 +1,7 @@
 import { type FormEvent, useEffect, useState } from "react";
-import {
-  Loader2,
-  Mic,
-  PieChart,
-  Search,
-  X,
-} from "lucide-react";
+import { Loader2, Mic, PieChart, Search, Star, X } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
+import { addWatchlistSymbol, getWatchlist } from "../lib/watchlistStorage";
 import { Link } from "react-router-dom";
 import {
   api,
@@ -15,6 +10,7 @@ import {
   postMarketPodcastGenerate,
   type PodcastSession,
 } from "../lib/api";
+import { MorningBriefing } from "../components/MorningBriefing";
 import { LoginStreakBanner as PulseLoginStreakBanner } from "../components/LoginStreakBanner";
 import { PodcastPlayer } from "../components/PodcastPlayer";
 import { StockInfoPanel } from "../components/StockInfoPanel";
@@ -86,14 +82,6 @@ type EarningsWeekItem = {
   symbol: string;
   earnings_date: string;
   within_days: number;
-};
-
-type MacroEventRow = {
-  id: string;
-  name: string;
-  date: string;
-  time_hint?: string;
-  category?: string;
 };
 
 type PredictionMarketRow = {
@@ -390,8 +378,6 @@ export function Market() {
   const [podcastOpenAt, setPodcastOpenAt] = useState<string | null>(null);
   const [expandedLeader, setExpandedLeader] = useState<string | null>(null);
   const [earningsItems, setEarningsItems] = useState<EarningsWeekItem[]>([]);
-  const [macroEvents, setMacroEvents] = useState<MacroEventRow[]>([]);
-  const [macroDisclaimer, setMacroDisclaimer] = useState<string | null>(null);
   const [predictionMarkets, setPredictionMarkets] = useState<PredictionMarketRow[]>([]);
   const [predictionDisclaimer, setPredictionDisclaimer] = useState<string | null>(null);
   const [capLeaders, setCapLeaders] = useState<Quote[]>([]);
@@ -407,6 +393,7 @@ export function Market() {
   const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
   const [compareLoading, setCompareLoading] = useState(false);
   const [peerCompareMessage, setPeerCompareMessage] = useState<string | null>(null);
+  const [watchlistToast, setWatchlistToast] = useState<string | null>(null);
   const [narrativeBuckets, setNarrativeBuckets] = useState<NarrativeBuckets | null>(null);
   const [narrativeLoading, setNarrativeLoading] = useState(true);
 
@@ -414,10 +401,9 @@ export function Market() {
     let cancelled = false;
     (async () => {
       try {
-        const [px, earningsRaw, macroRaw, polyRaw, capBatch, narrativeRaw] = await Promise.all([
+        const [px, earningsRaw, polyRaw, capBatch, narrativeRaw] = await Promise.all([
           api.marketPrices("BTC,ETH"),
           api.marketEarningsWeek(7).catch(() => null),
-          api.marketMacroEvents(90).catch(() => null),
           api.marketPredictionMarkets(8).catch(() => null),
           api.marketPrices(MARKET_CAP_LEADERS.join(",")),
           api.narrativeDigest(72).catch(() => null),
@@ -437,9 +423,6 @@ export function Market() {
         );
         const earn = (earningsRaw as { items?: EarningsWeekItem[] } | null)?.items ?? [];
         setEarningsItems(earn);
-        const ev = (macroRaw as { events?: MacroEventRow[]; disclaimer?: string } | null)?.events ?? [];
-        setMacroEvents(ev.slice(0, 12));
-        setMacroDisclaimer((macroRaw as { disclaimer?: string } | null)?.disclaimer ?? null);
         const mk = (polyRaw as { markets?: PredictionMarketRow[]; disclaimer?: string } | null)?.markets ?? [];
         setPredictionMarkets(mk);
         setPredictionDisclaimer((polyRaw as { disclaimer?: string } | null)?.disclaimer ?? null);
@@ -448,8 +431,6 @@ export function Market() {
         if (!cancelled) {
           setQuotes([]);
           setEarningsItems([]);
-          setMacroEvents([]);
-          setMacroDisclaimer(null);
           setPredictionMarkets([]);
           setPredictionDisclaimer(null);
           setCapLeaders([]);
@@ -661,6 +642,20 @@ export function Market() {
     }
   }
 
+  function addTickerToWatchlist() {
+    const s = stockLookupInput.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
+    if (!s) {
+      setWatchlistToast("Enter a ticker first");
+      window.setTimeout(() => setWatchlistToast(null), 2200);
+      return;
+    }
+    const uid = user?.id ?? "guest";
+    const had = getWatchlist(uid).includes(s);
+    addWatchlistSymbol(uid, s);
+    setWatchlistToast(had ? `${s} already on your watchlist` : `Added ${s} — also on Dashboard`);
+    window.setTimeout(() => setWatchlistToast(null), 2800);
+  }
+
   async function openStockLookupModal(e?: FormEvent) {
     e?.preventDefault();
     const s = stockLookupInput.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
@@ -746,10 +741,22 @@ export function Market() {
           <Search className="h-3.5 w-3.5" />
           Open
         </button>
+        <button
+          type="button"
+          onClick={addTickerToWatchlist}
+          className="inline-flex items-center gap-2 rounded-full border border-amber-600/50 bg-amber-950/30 px-4 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-950/50"
+        >
+          <Star className="h-3.5 w-3.5" />
+          Watchlist
+        </button>
         <p className="w-full text-[11px] text-zinc-500 sm:w-auto sm:pl-2">
-          Opens an overlay with chart and fundamentals — you stay on Market Pulse.
+          Open — chart &amp; fundamentals. Watchlist — appears below next to your portfolio (watchlist &amp; sector
+          mix).
         </p>
       </form>
+      {watchlistToast ? (
+        <p className="text-xs font-medium text-emerald-400/90">{watchlistToast}</p>
+      ) : null}
 
       <PulseLoginStreakBanner />
 
@@ -1094,41 +1101,14 @@ export function Market() {
             )}
           </div>
 
-          <div className="mt-6 border-t border-zinc-800 pt-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Upcoming macro</h2>
-            <p className="mt-1 text-xs text-zinc-500">
-              Key US releases (approximate dates — verify on official calendars). FOMC, jobs Friday, CPI proxy, GDP
-              advance.
-            </p>
-            {macroDisclaimer ? (
-              <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">{macroDisclaimer}</p>
-            ) : null}
-            <ul className="mt-3 space-y-2 text-sm">
-              {loading ? (
-                <li className="text-zinc-500">Loading macro calendar…</li>
-              ) : macroEvents.length === 0 ? (
-                <li className="text-zinc-500">No macro events in this horizon.</li>
-              ) : (
-                macroEvents.map((ev) => (
-                  <li
-                    key={ev.id}
-                    className="flex flex-col gap-0.5 rounded-lg border border-zinc-800/60 bg-zinc-900/30 px-3 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-zinc-200">{ev.name}</p>
-                      {ev.time_hint ? <p className="text-[11px] text-zinc-500">{ev.time_hint}</p> : null}
-                    </div>
-                    <div className="shrink-0 text-right text-xs text-zinc-400">
-                      <p className="tabular-nums">{fmtIsoDateShort(ev.date)}</p>
-                      {ev.category ? (
-                        <p className="mt-0.5 text-[10px] uppercase tracking-wide text-zinc-600">{ev.category}</p>
-                      ) : null}
-                    </div>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
+          <MorningBriefing variant="embedded" />
+          <p className="mt-3 text-[11px] text-zinc-600">
+            For release dates and macro regime detail, open{" "}
+            <Link className="text-sky-400/90 underline underline-offset-2" to="/macro-regime">
+              Macro &amp; hard assets
+            </Link>
+            .
+          </p>
         </section>
       </section>
 

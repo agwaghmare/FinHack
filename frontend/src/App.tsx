@@ -65,8 +65,8 @@ export default function App() {
               <Route path="settings" element={<Settings />} />
               <Route path="market" element={<Navigate to="/pulse" replace />} />
               <Route path="trade" element={<Navigate to="/paper-lab" replace />} />
-              <Route path="dashboard" element={<Navigate to="/pulse" replace />} />
               <Route path="news" element={<Navigate to="/pulse" replace />} />
+              <Route path="dashboard" element={<Navigate to="/pulse" replace />} />
               <Route path="*" element={<Navigate to="/pulse" replace />} />
             </Route>
           </Route>

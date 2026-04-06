@@ -102,6 +102,8 @@ export const api = {
   narrativeDigest: (limit = 72) =>
     j(`/news/narrative-digest?limit=${encodeURIComponent(String(limit))}`),
   macro: () => j("/macro/indicators"),
+  /** HMM + rules regime + optional Mistral narrative (can be slow). */
+  portfolioRegime: () => j("/portfolio/regime"),
   /** FRED time series for macro trend charts (default ~1y window). */
   macroHistory: (years = 1) =>
     j(`/macro/indicators/history?years=${encodeURIComponent(String(years))}`),
