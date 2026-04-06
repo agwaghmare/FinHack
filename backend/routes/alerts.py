@@ -1,9 +1,14 @@
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 
-from backend.dependencies.clerk_auth import optional_clerk_user
+from backend.dependencies.clerk_auth import optional_clerk_user, require_clerk_user
 from backend.services.alert_service import send_alert
+from backend.services.risk_signals_service import (
+    build_digest_message,
+    compute_risk_signals,
+    get_delivery_channels,
+)
 
 router = APIRouter()
 
@@ -14,7 +19,7 @@ def trigger(
     payload: dict = Body(default_factory=dict),
 ):
     """
-    Sends alert payload to **Zapier** (webhook) and/or **Twilio** SMS when configured.
+    Sends alert payload to an optional **HTTP webhook**, **Twilio** SMS, and/or **SMTP** email when configured.
     If the client sends `Authorization: Bearer <Clerk session JWT>`, `user_id` is attached.
     """
     message = str(payload.get("message") or payload.get("text") or "").strip()
@@ -72,3 +77,49 @@ def alert_send(body: dict = Body(default_factory=dict)):
     if not msg:
         msg = "Notification from FinSight"
     return send_alert(msg, metadata=body.get("metadata") or body)
+
+
+@router.get("/delivery")
+def alerts_delivery():
+    """Which outbound channels have env configured (no secrets)."""
+    return get_delivery_channels()
+
+
+@router.get("/signals")
+def alerts_signals(
+    user: Annotated[dict[str, Any], Depends(require_clerk_user)],
+    risk_alert_threshold: float = 7.0,
+    concentration_threshold: float = 0.35,
+):
+    """Live portfolio + market signals for the signed-in user."""
+    uid = user.get("sub")
+    if not uid:
+        raise HTTPException(status_code=401, detail="Missing user id")
+    return compute_risk_signals(
+        str(uid),
+        risk_alert_threshold=risk_alert_threshold,
+        concentration_threshold=concentration_threshold,
+    )
+
+
+@router.post("/digest")
+def alerts_digest(
+    user: Annotated[dict[str, Any], Depends(require_clerk_user)],
+    body: dict = Body(default_factory=dict),
+):
+    """
+    Compute current risk signals and send via SMS / email / optional HTTP webhook (whatever is configured).
+    """
+    uid = user.get("sub")
+    if not uid:
+        raise HTTPException(status_code=401, detail="Missing user id")
+    ra = float(body.get("risk_alert_threshold") or 7.0)
+    cc = float(body.get("concentration_threshold") or 0.35)
+    payload = compute_risk_signals(str(uid), risk_alert_threshold=ra, concentration_threshold=cc)
+    subj, msg = build_digest_message(payload)
+    meta = {
+        "alert_type": "risk_digest",
+        "subject": subj,
+        **payload.get("thresholds", {}),
+    }
+    return send_alert(msg, metadata=meta, user_id=str(uid))

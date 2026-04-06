@@ -51,14 +51,19 @@ def elevenlabs_key() -> str:
     )
 
 
-def zapier_webhook_url() -> str:
-    """Primary Zapier Catch Hook or any JSON POST webhook."""
+def alert_webhook_url() -> str:
+    """Optional URL that receives JSON POST alert payloads (SMS/email are preferred for most users)."""
     return _get(
-        "ZAPIER_WEBHOOK_URL",
-        "ZAPIER_WEBHOOK",
         "ALERT_WEBHOOK_URL",
         "WEBHOOK_URL",
+        "ZAPIER_WEBHOOK_URL",
+        "ZAPIER_WEBHOOK",
     )
+
+
+def zapier_webhook_url() -> str:
+    """Deprecated alias for :func:`alert_webhook_url` (same env vars)."""
+    return alert_webhook_url()
 
 
 def twilio_account_sid() -> str:
@@ -77,6 +82,35 @@ def twilio_from_number() -> str:
 def alert_sms_to() -> str:
     """Destination E.164 for SMS alerts (optional)."""
     return _get("ALERT_SMS_TO", "TWILIO_ALERT_TO")
+
+
+def smtp_host() -> str:
+    return _get("SMTP_HOST", "EMAIL_SMTP_HOST")
+
+
+def smtp_port() -> int:
+    raw = _get("SMTP_PORT", "EMAIL_SMTP_PORT")
+    try:
+        return int(raw) if raw else 587
+    except ValueError:
+        return 587
+
+
+def smtp_user() -> str:
+    return _get("SMTP_USER", "EMAIL_SMTP_USER", "SMTP_USERNAME")
+
+
+def smtp_password() -> str:
+    return _get("SMTP_PASSWORD", "EMAIL_SMTP_PASSWORD", "SMTP_PASS")
+
+
+def alert_email_from() -> str:
+    return _get("ALERT_EMAIL_FROM", "SMTP_FROM", "EMAIL_FROM")
+
+
+def alert_email_to() -> str:
+    """Primary inbox for alert emails (comma-separated ok — first used for To)."""
+    return _get("ALERT_EMAIL_TO", "SMTP_TO", "ALERT_TO_EMAIL")
 
 
 def clerk_secret_key() -> str:
