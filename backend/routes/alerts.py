@@ -28,15 +28,23 @@ def trigger(
 
     meta = {k: v for k, v in payload.items() if k not in ("message", "text")}
     uid = str(clerk_user["sub"]) if clerk_user and clerk_user.get("sub") else None
+    jwt_email = (
+        str(clerk_user.get("email") or "").strip() or None if clerk_user else None
+    )
 
-    return send_alert(message, metadata=meta, user_id=uid)
+    return send_alert(message, metadata=meta, user_id=uid, recipient_email=jwt_email)
 
 
 @router.post("/risk/{user_id}")
 def alert_risk(
     user_id: str,
+    clerk_user: Annotated[dict[str, Any], Depends(require_clerk_user)],
     body: dict = Body(default_factory=dict),
 ):
+    uid = clerk_user.get("sub")
+    if not uid or str(uid) != user_id:
+        raise HTTPException(status_code=403, detail="user_id must match the signed-in user")
+    jwt_email = str(clerk_user.get("email") or "").strip() or None
     msg = str(
         body.get("message")
         or f"Portfolio risk threshold event for user {user_id}"
@@ -45,6 +53,7 @@ def alert_risk(
         msg,
         metadata={"alert_type": "risk", "user_id": user_id, **body},
         user_id=user_id,
+        recipient_email=jwt_email,
     )
 
 
@@ -58,7 +67,15 @@ def alert_news(body: dict = Body(default_factory=dict)):
 
 
 @router.post("/trade/{user_id}")
-def alert_trade(user_id: str, body: dict = Body(default_factory=dict)):
+def alert_trade(
+    user_id: str,
+    clerk_user: Annotated[dict[str, Any], Depends(require_clerk_user)],
+    body: dict = Body(default_factory=dict),
+):
+    uid = clerk_user.get("sub")
+    if not uid or str(uid) != user_id:
+        raise HTTPException(status_code=403, detail="user_id must match the signed-in user")
+    jwt_email = str(clerk_user.get("email") or "").strip() or None
     msg = str(
         body.get("message")
         or f"Trade risk flag for user {user_id}"
@@ -67,16 +84,29 @@ def alert_trade(user_id: str, body: dict = Body(default_factory=dict)):
         msg,
         metadata={"alert_type": "trade", "user_id": user_id, **body},
         user_id=user_id,
+        recipient_email=jwt_email,
     )
 
 
 @router.post("/send")
-def alert_send(body: dict = Body(default_factory=dict)):
-    """Explicit notification — same pipeline (webhook + optional SMS)."""
+def alert_send(
+    clerk_user: Annotated[dict[str, Any] | None, Depends(optional_clerk_user)],
+    body: dict = Body(default_factory=dict),
+):
+    """Explicit notification — same pipeline (webhook + optional SMS + email)."""
     msg = str(body.get("message") or "").strip()
     if not msg:
         msg = "Notification from FinSight"
-    return send_alert(msg, metadata=body.get("metadata") or body)
+    uid = str(clerk_user["sub"]) if clerk_user and clerk_user.get("sub") else None
+    jwt_email = (
+        str(clerk_user.get("email") or "").strip() or None if clerk_user else None
+    )
+    return send_alert(
+        msg,
+        metadata=body.get("metadata") or body,
+        user_id=uid,
+        recipient_email=jwt_email,
+    )
 
 
 @router.get("/delivery")
@@ -122,4 +152,10 @@ def alerts_digest(
         "subject": subj,
         **payload.get("thresholds", {}),
     }
-    return send_alert(msg, metadata=meta, user_id=str(uid))
+    jwt_email = str(user.get("email") or "").strip() or None
+    return send_alert(
+        msg,
+        metadata=meta,
+        user_id=str(uid),
+        recipient_email=jwt_email,
+    )

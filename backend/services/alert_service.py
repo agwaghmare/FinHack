@@ -7,6 +7,10 @@ from typing import Any
 
 import requests
 
+from backend.services.clerk_service import (
+    get_clerk_metadata_alert_email,
+    get_clerk_user_primary_email,
+)
 from backend.utils.env_keys import (
     alert_email_from,
     alert_email_to,
@@ -47,8 +51,11 @@ def _delivery_hints(webhook_d: str, sms_d: str, email_d: str) -> list[str]:
 
     if "smtp_not_configured" in e:
         hints.append(
-            "Email: set SMTP_HOST, SMTP_PORT, ALERT_EMAIL_FROM, ALERT_EMAIL_TO, and usually SMTP_USER + SMTP_PASSWORD "
-            "(Gmail needs an app password). Restart the API after editing .env.",
+            "Email: set SMTP_HOST, SMTP_PORT, ALERT_EMAIL_FROM, and usually SMTP_USER + SMTP_PASSWORD "
+            "(Gmail needs an app password). For per-user delivery, set CLERK_SECRET_KEY so the API can read each "
+            "user's primary email or per-user ``private_metadata.alert_email``; optionally set ALERT_EMAIL_TO as a "
+            "fallback for unauthenticated sends. "
+            "Restart the API after editing .env.",
         )
     elif "smtp_error" in e:
         hints.append("SMTP failed after connect — check host, port (587 STARTTLS vs 465 SSL), username/password, and sender allowlisting.")
@@ -56,6 +63,33 @@ def _delivery_hints(webhook_d: str, sms_d: str, email_d: str) -> list[str]:
     if not hints:
         hints.append("Configure at least one of: ALERT_WEBHOOK_URL, Twilio SMS, or SMTP (see docs on Alerts page).")
     return hints
+
+
+def _resolve_smtp_recipient(
+    recipient_email: str | None,
+    user_id: str | None,
+) -> str | None:
+    """
+    1. Clerk ``private_metadata.alert_email`` (or ``public_metadata``) — per-user dynamic TO.
+    2. JWT/session ``email`` claim when present.
+    3. Clerk primary email.
+    4. Env ``ALERT_EMAIL_TO`` (fallback for unauthenticated or no Clerk profile).
+    """
+    if user_id:
+        meta_to = get_clerk_metadata_alert_email(user_id)
+        if meta_to:
+            return meta_to
+    e = (recipient_email or "").strip()
+    if e and "@" in e:
+        return e
+    if user_id:
+        ce = get_clerk_user_primary_email(user_id)
+        if ce:
+            return ce
+    raw = alert_email_to()
+    if raw:
+        return raw.split(",")[0].strip()
+    return None
 
 
 def _send_http_webhook(payload: dict[str, Any]) -> tuple[bool, str]:
@@ -72,24 +106,22 @@ def _send_http_webhook(payload: dict[str, Any]) -> tuple[bool, str]:
         return False, f"webhook_error:{e}"
 
 
-def _send_smtp_email(subject: str, body: str) -> tuple[bool, str]:
+def _send_smtp_email(subject: str, body: str, *, to_addr: str | None) -> tuple[bool, str]:
     """Optional SMTP (Gmail app password, SendGrid SMTP, etc.)."""
     host = smtp_host()
-    to_raw = alert_email_to()
     from_addr = alert_email_from()
     user = smtp_user()
     password = smtp_password()
-    if not host or not to_raw or not from_addr:
+    to = (to_addr or "").strip() if to_addr else ""
+    if not host or not from_addr:
         missing = []
         if not host:
             missing.append("SMTP_HOST")
-        if not to_raw:
-            missing.append("ALERT_EMAIL_TO")
         if not from_addr:
             missing.append("ALERT_EMAIL_FROM")
         return False, f"smtp_not_configured:missing={','.join(missing)}"
-    # First recipient if comma-separated
-    to_addr = to_raw.split(",")[0].strip()
+    if not to or "@" not in to:
+        return False, "smtp_not_configured:missing=recipient(no user email and no ALERT_EMAIL_TO)"
     try:
         import smtplib
         from email.mime.multipart import MIMEMultipart
@@ -98,7 +130,7 @@ def _send_smtp_email(subject: str, body: str) -> tuple[bool, str]:
         msg = MIMEMultipart("alternative")
         msg["Subject"] = subject[:200]
         msg["From"] = from_addr
-        msg["To"] = to_addr
+        msg["To"] = to
         msg.attach(MIMEText(body[:12000], "plain", "utf-8"))
 
         port = smtp_port()
@@ -106,7 +138,7 @@ def _send_smtp_email(subject: str, body: str) -> tuple[bool, str]:
             with smtplib.SMTP_SSL(host, port, timeout=30) as server:
                 if user and password:
                     server.login(user, password)
-                server.sendmail(from_addr, [to_addr], msg.as_string())
+                server.sendmail(from_addr, [to], msg.as_string())
         else:
             with smtplib.SMTP(host, port, timeout=30) as server:
                 server.ehlo()
@@ -117,8 +149,8 @@ def _send_smtp_email(subject: str, body: str) -> tuple[bool, str]:
                     pass
                 if user and password:
                     server.login(user, password)
-                server.sendmail(from_addr, [to_addr], msg.as_string())
-        logger.info("SMTP alert email sent to %s", to_addr[:8] + "…")
+                server.sendmail(from_addr, [to], msg.as_string())
+        logger.info("SMTP alert email sent to %s", to[:8] + "…")
         return True, "smtp_sent"
     except Exception as e:
         logger.exception("SMTP email failed: %s", e)
@@ -162,10 +194,14 @@ def send_alert(
     *,
     metadata: dict[str, Any] | None = None,
     user_id: str | None = None,
+    recipient_email: str | None = None,
 ) -> dict[str, Any]:
     """
     Notify optional HTTP webhook (JSON POST), Twilio SMS, and SMTP email.
     Set ``ALERT_WEBHOOK_URL``, Twilio + ``ALERT_SMS_TO``, and/or SMTP vars in env.
+
+    Email ``To``: ``recipient_email`` (e.g. from JWT) if valid, else Clerk primary email for
+    ``user_id`` (requires ``CLERK_SECRET_KEY``), else ``ALERT_EMAIL_TO`` in env.
     """
     payload: dict[str, Any] = {
         "message": message,
@@ -178,8 +214,11 @@ def send_alert(
     webhook_ok, webhook_detail = _send_http_webhook(payload)
     sms_ok, sms_detail = _send_twilio_sms(message) if message.strip() else (False, "empty_message")
     subj = str((metadata or {}).get("subject") or "FinSight alert")[:200]
+    smtp_to = _resolve_smtp_recipient(recipient_email, user_id)
     email_ok, email_detail = (
-        _send_smtp_email(subj, message) if message.strip() else (False, "empty_message")
+        _send_smtp_email(subj, message, to_addr=smtp_to)
+        if message.strip()
+        else (False, "empty_message")
     )
 
     hints = _delivery_hints(webhook_detail, sms_detail, email_detail)

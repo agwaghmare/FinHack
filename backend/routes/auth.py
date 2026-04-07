@@ -2,10 +2,15 @@
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, HTTPException
 
 from backend.dependencies.clerk_auth import require_clerk_user
-from backend.services.clerk_service import get_clerk_public_config, get_clerk_user_json
+from backend.services.clerk_service import (
+    get_clerk_metadata_alert_email,
+    get_clerk_public_config,
+    get_clerk_user_json,
+    set_clerk_user_alert_email,
+)
 from backend.utils.env_keys import (
     alert_email_from,
     alert_email_to,
@@ -58,9 +63,9 @@ def integration_status() -> dict[str, Any]:
     smtp_auth_ok = (not u_ok and not p_ok) or (u_ok and p_ok)
     smtp_email = (
         _configured(smtp_host())
-        and _configured(alert_email_to())
         and _configured(alert_email_from())
         and smtp_auth_ok
+        and (_configured(alert_email_to()) or _configured(clerk_secret_key()))
     )
     return {
         "gnews": _configured(gnews_key()),
@@ -81,6 +86,43 @@ def integration_status() -> dict[str, Any]:
         "twilio_alert_to": tw_to,
         "smtp_email": smtp_email,
     }
+
+
+@router.get("/alert-email")
+def auth_get_alert_email(
+    user: Annotated[dict[str, Any], Depends(require_clerk_user)],
+) -> dict[str, Any]:
+    """Per-user SMTP destination override (Clerk private_metadata), not the resolved fallback chain."""
+    uid = user.get("sub")
+    if not uid:
+        raise HTTPException(status_code=401, detail="Missing user id")
+    addr = get_clerk_metadata_alert_email(str(uid))
+    return {"alert_email": addr}
+
+
+@router.patch("/alert-email")
+def auth_patch_alert_email(
+    user: Annotated[dict[str, Any], Depends(require_clerk_user)],
+    body: dict = Body(default_factory=dict),
+) -> dict[str, Any]:
+    """
+    Set or clear dynamic alert inbox (stored in Clerk ``private_metadata.alert_email``).
+    Send ``{"email": null}`` or ``{"email": ""}`` to clear and use primary account email / env.
+    """
+    uid = user.get("sub")
+    if not uid:
+        raise HTTPException(status_code=401, detail="Missing user id")
+    raw = body.get("email")
+    if raw is None or (isinstance(raw, str) and not raw.strip()):
+        ok, detail = set_clerk_user_alert_email(str(uid), None)
+    else:
+        email = str(raw).strip()
+        if "@" not in email or len(email) > 320:
+            raise HTTPException(status_code=400, detail="Invalid email")
+        ok, detail = set_clerk_user_alert_email(str(uid), email)
+    if not ok:
+        raise HTTPException(status_code=502, detail=detail)
+    return {"ok": True, "alert_email": get_clerk_metadata_alert_email(str(uid))}
 
 
 @router.get("/me")

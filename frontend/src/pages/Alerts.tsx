@@ -64,6 +64,9 @@ export function Alerts() {
   const [riskThreshold, setRiskThreshold] = useState(7);
   const [concThreshold, setConcThreshold] = useState(0.35);
   const [activity, setActivity] = useState<ActivityItem[]>([]);
+  const [alertEmailInput, setAlertEmailInput] = useState("");
+  const [alertEmailBusy, setAlertEmailBusy] = useState(false);
+  const [alertEmailNotice, setAlertEmailNotice] = useState<string | null>(null);
 
   useEffect(() => {
     try {
@@ -110,6 +113,25 @@ export function Alerts() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!isSignedIn) {
+      setAlertEmailInput("");
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.alertEmailGet();
+        if (!cancelled) setAlertEmailInput((r.alert_email as string | undefined) ?? "");
+      } catch {
+        if (!cancelled) setAlertEmailInput("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn]);
 
   const loadSignals = useCallback(async () => {
     if (!isSignedIn || !user?.id) {
@@ -220,6 +242,37 @@ export function Alerts() {
       pushActivity("Risk-only alert", false, msg);
     } finally {
       setSending(false);
+    }
+  }
+
+  async function saveAlertEmail() {
+    if (!isSignedIn) return;
+    setAlertEmailBusy(true);
+    setAlertEmailNotice(null);
+    try {
+      const trimmed = alertEmailInput.trim();
+      const r = await api.alertEmailPatch(trimmed ? trimmed : null);
+      setAlertEmailInput((r.alert_email as string | undefined) ?? "");
+      setAlertEmailNotice(trimmed ? "Saved — alerts will use this address." : "Cleared — using your Clerk primary email.");
+    } catch (e) {
+      setAlertEmailNotice(e instanceof Error ? e.message : "Could not save");
+    } finally {
+      setAlertEmailBusy(false);
+    }
+  }
+
+  async function clearAlertEmailOverride() {
+    if (!isSignedIn) return;
+    setAlertEmailBusy(true);
+    setAlertEmailNotice(null);
+    try {
+      const r = await api.alertEmailPatch(null);
+      setAlertEmailInput((r.alert_email as string | undefined) ?? "");
+      setAlertEmailNotice("Cleared — using your Clerk primary email (or env fallback).");
+    } catch (e) {
+      setAlertEmailNotice(e instanceof Error ? e.message : "Could not clear");
+    } finally {
+      setAlertEmailBusy(false);
     }
   }
 
@@ -334,6 +387,56 @@ export function Alerts() {
           </div>
         ))}
       </section>
+
+      {isSignedIn ? (
+        <section className="rounded-3xl border border-zinc-800 bg-zinc-950/50 p-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Mail className="h-5 w-5 text-sky-400/90" />
+              <div>
+                <h2 className="text-sm font-semibold text-zinc-100">Email destination (your account)</h2>
+                <p className="mt-1 max-w-xl text-xs text-zinc-500">
+                  Optional override for where SMTP alerts are sent. If empty, we use your Clerk primary email, then the
+                  server <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">ALERT_EMAIL_TO</code> fallback.
+                  Stored in Clerk as private metadata — not in <code className="font-mono text-[11px]">.env</code>.
+                </p>
+              </div>
+            </div>
+            <div className="flex w-full min-w-[min(100%,20rem)] flex-col gap-2 sm:w-auto sm:min-w-[18rem]">
+              <input
+                type="email"
+                autoComplete="email"
+                placeholder="Leave blank for primary email"
+                value={alertEmailInput}
+                onChange={(e) => setAlertEmailInput(e.target.value)}
+                className="w-full rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600"
+              />
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => void saveAlertEmail()}
+                  disabled={alertEmailBusy}
+                  className="inline-flex items-center gap-2 rounded-lg bg-sky-600/90 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-500 disabled:opacity-50"
+                >
+                  {alertEmailBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void clearAlertEmailOverride()}
+                  disabled={alertEmailBusy}
+                  className="rounded-lg border border-zinc-600 px-4 py-2 text-xs font-medium text-zinc-300 hover:bg-zinc-800 disabled:opacity-50"
+                >
+                  Clear override
+                </button>
+              </div>
+              {alertEmailNotice ? (
+                <p className="text-xs text-zinc-400">{alertEmailNotice}</p>
+              ) : null}
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {/* Thresholds + live signals */}
       <section className="grid gap-6 xl:grid-cols-5">
@@ -543,9 +646,11 @@ export function Alerts() {
             <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">SMTP_PORT</code> (587 or 465),{" "}
             <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">SMTP_USER</code>,{" "}
             <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">SMTP_PASSWORD</code>,{" "}
-            <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">ALERT_EMAIL_FROM</code>,{" "}
-            <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">ALERT_EMAIL_TO</code>. Restart the API after
-            changes.
+            <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">ALERT_EMAIL_FROM</code> (your sender).{" "}
+            Signed-in users receive mail at their Clerk primary email when{" "}
+            <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">CLERK_SECRET_KEY</code> is set; optionally
+            set <code className="rounded bg-zinc-900 px-1 font-mono text-[11px]">ALERT_EMAIL_TO</code> for unauthenticated
+            or fallback delivery. Restart the API after changes.
           </li>
           <li>
             <strong className="text-zinc-200">Optional HTTP webhook:</strong> set{" "}

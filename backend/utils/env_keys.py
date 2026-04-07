@@ -109,7 +109,11 @@ def alert_email_from() -> str:
 
 
 def alert_email_to() -> str:
-    """Primary inbox for alert emails (comma-separated ok — first used for To)."""
+    """
+    Optional default inbox for alert emails when no signed-in user is available
+    (comma-separated ok — first used for To). If ``CLERK_SECRET_KEY`` is set, alerts
+    for authenticated users are sent to their Clerk primary email instead.
+    """
     return _get("ALERT_EMAIL_TO", "SMTP_TO", "ALERT_TO_EMAIL")
 
 

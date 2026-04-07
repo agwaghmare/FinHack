@@ -224,6 +224,13 @@ export const api = {
       body: JSON.stringify({ user_id: userId, body }),
     }),
   clerkConfig: () => j<{ publishable_key?: string }>("/auth/clerk-config"),
+  /** Signed-in: optional SMTP destination override (Clerk private_metadata). */
+  alertEmailGet: () => j<{ alert_email?: string | null }>("/auth/alert-email"),
+  alertEmailPatch: (email: string | null) =>
+    j<{ ok?: boolean; alert_email?: string | null }>("/auth/alert-email", {
+      method: "PATCH",
+      body: JSON.stringify({ email }),
+    }),
   integrationStatus: () =>
     j<Record<string, boolean>>("/auth/integration-status"),
   health: () =>

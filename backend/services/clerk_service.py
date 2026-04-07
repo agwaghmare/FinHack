@@ -62,6 +62,7 @@ def clerk_backend_request(
     path: str,
     *,
     params: dict[str, Any] | None = None,
+    json_body: dict[str, Any] | None = None,
 ) -> httpx.Response:
     """Call Clerk Backend API with your secret key (server-side only)."""
     secret = clerk_secret_key()
@@ -74,7 +75,13 @@ def clerk_backend_request(
         "Content-Type": "application/json",
     }
     with httpx.Client(timeout=30.0) as client:
-        return client.request(method, url, headers=headers, params=params or {})
+        return client.request(
+            method,
+            url,
+            headers=headers,
+            params=params or {},
+            json=json_body,
+        )
 
 
 def get_clerk_user_json(user_id: str) -> dict[str, Any] | None:
@@ -92,6 +99,84 @@ def get_clerk_user_json(user_id: str) -> dict[str, Any] | None:
     except Exception as e:
         logger.exception("Clerk API error: %s", e)
         return None
+
+
+def get_clerk_user_primary_email(user_id: str) -> str | None:
+    """
+    Primary email for SMTP alert delivery (Clerk Backend API).
+    Uses `primary_email_address_id` when present, else first verified-looking address.
+    """
+    data = get_clerk_user_json(user_id)
+    if not data or not isinstance(data, dict):
+        return None
+    primary_id = data.get("primary_email_address_id")
+    emails = data.get("email_addresses") or []
+    if not isinstance(emails, list):
+        return None
+    for e in emails:
+        if not isinstance(e, dict):
+            continue
+        if primary_id and e.get("id") == primary_id:
+            addr = (e.get("email_address") or "").strip()
+            if addr and "@" in addr:
+                return addr
+    for e in emails:
+        if not isinstance(e, dict):
+            continue
+        addr = (e.get("email_address") or "").strip()
+        if addr and "@" in addr:
+            return addr
+    return None
+
+
+def get_clerk_metadata_alert_email(user_id: str) -> str | None:
+    """
+    Optional per-user inbox stored in Clerk ``private_metadata.alert_email`` or
+    ``public_metadata.alert_email`` (also accepts legacy key ``alert_email_to``).
+    """
+    data = get_clerk_user_json(user_id)
+    if not data or not isinstance(data, dict):
+        return None
+    for meta in (data.get("private_metadata"), data.get("public_metadata")):
+        if not isinstance(meta, dict):
+            continue
+        for key in ("alert_email", "alert_email_to"):
+            raw = meta.get(key)
+            if raw is None:
+                continue
+            addr = str(raw).strip()
+            if addr and "@" in addr and len(addr) < 320:
+                return addr
+    return None
+
+
+def set_clerk_user_alert_email(user_id: str, email: str | None) -> tuple[bool, str]:
+    """
+    Persist dynamic alert destination in ``private_metadata.alert_email``.
+    Pass ``None`` or empty string to clear and fall back to primary email / env.
+    """
+    if not clerk_secret_key():
+        return False, "clerk_secret_missing"
+    data = get_clerk_user_json(user_id)
+    if not data or not isinstance(data, dict):
+        return False, "user_not_found"
+    pm = dict(data.get("private_metadata") or {})
+    if email and str(email).strip():
+        pm["alert_email"] = str(email).strip()
+    else:
+        pm.pop("alert_email", None)
+    try:
+        r = clerk_backend_request(
+            "PATCH",
+            f"/users/{user_id}",
+            json_body={"private_metadata": pm},
+        )
+        if r.status_code not in (200, 201):
+            return False, r.text[:300]
+        return True, "ok"
+    except Exception as e:
+        logger.exception("Clerk PATCH alert email: %s", e)
+        return False, str(e)
 
 
 def _display_name_from_clerk_user(data: dict[str, Any]) -> str | None:

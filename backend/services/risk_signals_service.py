@@ -12,6 +12,7 @@ from backend.utils.env_keys import (
     alert_email_to,
     alert_sms_to,
     alert_webhook_url,
+    clerk_secret_key,
     smtp_host,
     smtp_password,
     smtp_user,
@@ -40,9 +41,9 @@ def get_delivery_channels() -> dict[str, Any]:
     auth_ok = (not u_ok and not p_ok) or (u_ok and p_ok)
     email_ready = (
         _configured(smtp_host())
-        and _configured(alert_email_to())
         and _configured(alert_email_from())
         and auth_ok
+        and (_configured(alert_email_to()) or _configured(clerk_secret_key()))
     )
     return {
         "webhook": _configured(alert_webhook_url()),
