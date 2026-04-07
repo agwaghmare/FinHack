@@ -21,4 +21,4 @@ def generate(body: dict):
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"TTS failed: {e!s}") from e
 
-    return Response(content=audio, media_type="audio/mpeg")
+    return Response(content=audio, media_type="audio/wav")

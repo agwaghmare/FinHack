@@ -76,6 +76,9 @@ export const api = {
   /** Earnings dates in the next N days (watchlist universe). */
   marketEarningsWeek: (days = 7) =>
     j(`/market/earnings-week?days=${encodeURIComponent(String(days))}`),
+  /** Main points from latest forms + transcript cues. */
+  marketEarningsBrief: (symbol: string) =>
+    j(`/market/earnings-brief?symbol=${encodeURIComponent(symbol)}`),
   /** Approximate macro release calendar (FOMC, NFP, CPI, GDP). */
   marketMacroEvents: (horizonDays = 90) =>
     j(
@@ -233,6 +236,12 @@ export const api = {
     }),
   integrationStatus: () =>
     j<Record<string, boolean>>("/auth/integration-status"),
+  brokerOauthStartUrl: (broker: string, redirectUri: string, state = "") =>
+    `${base}/auth/broker-oauth/start?broker=${encodeURIComponent(broker)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+  brokerOauthCallbackUrl: (broker: string) =>
+    `${base}/auth/broker-oauth/callback?broker=${encodeURIComponent(broker)}`,
+  brokerOauthConnections: () =>
+    j<{ connections?: Array<Record<string, unknown>> }>("/auth/broker-oauth/connections"),
   health: () =>
     j<{
       status?: string;

@@ -53,6 +53,10 @@ export function RealPortfolio() {
   const [coachText, setCoachText] = useState<string | null>(null);
   const [coachBusy, setCoachBusy] = useState(false);
   const [coachErr, setCoachErr] = useState<string | null>(null);
+  const [integrationStatus, setIntegrationStatus] = useState<Record<string, boolean> | null>(null);
+  const [integrationLoading, setIntegrationLoading] = useState(true);
+  const [oauthNotice, setOauthNotice] = useState<string | null>(null);
+  const [oauthConnections, setOauthConnections] = useState<Array<Record<string, unknown>>>([]);
 
   const refresh = useCallback(async () => {
     if (!userId) return;
@@ -75,6 +79,56 @@ export function RealPortfolio() {
     }
     refresh();
   }, [isLoaded, userId, refresh]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setIntegrationLoading(true);
+      try {
+        const s = (await api.integrationStatus()) as Record<string, boolean>;
+        if (!cancelled) setIntegrationStatus(s);
+      } catch {
+        if (!cancelled) setIntegrationStatus(null);
+      } finally {
+        if (!cancelled) setIntegrationLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await api.brokerOauthConnections();
+        if (!cancelled) setOauthConnections((r.connections as Array<Record<string, unknown>>) ?? []);
+      } catch {
+        if (!cancelled) setOauthConnections([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [oauthNotice]);
+
+  useEffect(() => {
+    const u = new URL(window.location.href);
+    const broker = u.searchParams.get("broker");
+    const status = u.searchParams.get("oauth_status");
+    const message = u.searchParams.get("oauth_message");
+    if (broker && status) {
+      const msg = message ? ` (${message.replace(/_/g, " ")})` : "";
+      setOauthNotice(`OAuth ${status} for ${broker.replace(/_/g, " ")}${msg}`);
+      u.searchParams.delete("code");
+      u.searchParams.delete("state");
+      u.searchParams.delete("broker");
+      u.searchParams.delete("oauth_status");
+      u.searchParams.delete("oauth_message");
+      window.history.replaceState({}, "", u.toString());
+    }
+  }, []);
 
   useEffect(() => {
     const sym = symbol.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
@@ -226,6 +280,11 @@ export function RealPortfolio() {
     }
   }
 
+  function startBrokerOauth(broker: string) {
+    const callback = api.brokerOauthCallbackUrl(broker);
+    window.location.href = api.brokerOauthStartUrl(broker, callback);
+  }
+
   if (!isLoaded) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center gap-2 text-zinc-500">
@@ -270,6 +329,11 @@ export function RealPortfolio() {
       {err && (
         <p className="rounded-xl border border-amber-500/40 bg-amber-950/25 px-4 py-2 text-sm text-amber-800 dark:text-amber-100">
           {err}
+        </p>
+      )}
+      {oauthNotice && (
+        <p className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 px-4 py-2 text-sm text-emerald-700 dark:text-emerald-200">
+          {oauthNotice}
         </p>
       )}
 
@@ -506,22 +570,96 @@ export function RealPortfolio() {
       <section className="glass rounded-2xl border border-zinc-200/70 bg-white/80 p-6 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Connect your broker</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          Securely connect brokerage accounts to sync holdings, balances, and trade history. (Planned
-          integrations — buttons are placeholders until OAuth is wired.)
+          Connectors show live availability from backend configuration. Alpaca works via API keys;
+          other broker OAuth links are listed as upcoming.
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
-          {["Alpaca", "Robinhood", "Interactive Brokers", "Charles Schwab", "TD Ameritrade"].map(
-            (broker) => (
-              <button
-                key={broker}
-                type="button"
-                className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-900 dark:border-zinc-600 dark:text-zinc-300 dark:hover:border-zinc-500 dark:hover:text-white"
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="rounded-xl border border-zinc-300/80 bg-white/70 px-3 py-3 dark:border-zinc-700 dark:bg-zinc-900/40">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-zinc-900 dark:text-zinc-100">Alpaca</p>
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                  integrationStatus?.alpaca_oauth
+                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                    : "bg-zinc-500/15 text-zinc-600 dark:text-zinc-400"
+                }`}
               >
-                Connect {broker}
+                {integrationLoading
+                  ? "Checking..."
+                  : integrationStatus?.alpaca_oauth
+                    ? "OAuth ready"
+                    : "Not configured"}
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              Requires `ALPACA_OAUTH_CLIENT_ID` + `ALPACA_OAUTH_AUTHORIZE_URL` in backend env.
+            </p>
+            <button
+              type="button"
+              onClick={() => startBrokerOauth("alpaca")}
+              disabled={!integrationStatus?.alpaca_oauth}
+              className="mt-2 inline-flex rounded-full border border-zinc-300 px-3 py-1.5 text-[11px] font-semibold text-zinc-700 hover:border-zinc-500 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300"
+            >
+              Connect via OAuth
+            </button>
+          </div>
+          {[
+            { label: "Robinhood", key: "robinhood" },
+            { label: "Interactive Brokers", key: "interactive_brokers" },
+            { label: "Charles Schwab", key: "charles_schwab" },
+            { label: "TD Ameritrade", key: "td_ameritrade" },
+          ].map((broker) => (
+            <div
+              key={broker.key}
+              className="rounded-xl border border-zinc-300/60 bg-zinc-50/70 px-3 py-3 opacity-80 dark:border-zinc-800 dark:bg-zinc-900/30"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-zinc-800 dark:text-zinc-200">{broker.label}</p>
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    integrationStatus?.[`${broker.key}_oauth`]
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                  }`}
+                >
+                  {integrationStatus?.[`${broker.key}_oauth`] ? "OAuth ready" : "Coming soon"}
+                </span>
+              </div>
+              <p className="mt-1 text-[11px] text-zinc-500">
+                {integrationStatus?.[`${broker.key}_oauth`]
+                  ? "OAuth provider is configured."
+                  : "Add provider OAuth env vars to enable connect."}
+              </p>
+              <button
+                type="button"
+                onClick={() => startBrokerOauth(broker.key)}
+                disabled={!integrationStatus?.[`${broker.key}_oauth`]}
+                className="mt-2 inline-flex rounded-full border border-zinc-300 px-3 py-1.5 text-[11px] font-semibold text-zinc-700 hover:border-zinc-500 hover:text-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-600 dark:text-zinc-300"
+              >
+                Connect via OAuth
               </button>
-            ),
-          )}
+            </div>
+          ))}
         </div>
+        <p className="mt-3 text-[11px] text-zinc-500">
+          No OAuth config yet? Set provider env vars in backend and restart API, or use{" "}
+          <Link to="/settings" className="underline underline-offset-2">
+            Settings
+          </Link>
+          .
+        </p>
+        {oauthConnections.length > 0 ? (
+          <div className="mt-3 rounded-xl border border-emerald-500/30 bg-emerald-950/10 p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-500">Connected brokers</p>
+            <ul className="mt-2 space-y-1 text-xs text-zinc-300">
+              {oauthConnections.map((c, i) => (
+                <li key={`${String(c.broker ?? "broker")}-${i}`}>
+                  {String(c.broker ?? "broker")} - {String(c.connected ? "connected" : "unknown")}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </section>
 
       <p className="text-[11px] leading-relaxed text-zinc-500">

@@ -1,8 +1,11 @@
 """Clerk-backed auth helpers for the API."""
 
+from urllib.parse import urlencode
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
+import httpx
 
 from backend.dependencies.clerk_auth import require_clerk_user
 from backend.services.clerk_service import (
@@ -11,6 +14,7 @@ from backend.services.clerk_service import (
     get_clerk_user_json,
     set_clerk_user_alert_email,
 )
+from backend.services.broker_oauth_service import create_state, consume_state, get_connections, set_connected
 from backend.utils.env_keys import (
     alert_email_from,
     alert_email_to,
@@ -32,9 +36,15 @@ from backend.utils.env_keys import (
     smtp_host,
     smtp_password,
     smtp_user,
+    broker_oauth_authorize_url,
+    broker_oauth_client_id,
+    broker_oauth_client_secret,
+    broker_oauth_scope,
+    broker_oauth_token_url,
 )
 
 router = APIRouter()
+_BROKERS = ("alpaca", "robinhood", "interactive_brokers", "charles_schwab", "td_ameritrade")
 
 
 def _configured(value: str) -> bool:
@@ -67,6 +77,13 @@ def integration_status() -> dict[str, Any]:
         and smtp_auth_ok
         and (_configured(alert_email_to()) or _configured(clerk_secret_key()))
     )
+    oauth_ready = {
+        f"{b}_oauth": (
+            _configured(broker_oauth_client_id(b))
+            and _configured(broker_oauth_authorize_url(b))
+        )
+        for b in _BROKERS
+    }
     return {
         "gnews": _configured(gnews_key()),
         "fred": _configured(fred_key()),
@@ -85,7 +102,104 @@ def integration_status() -> dict[str, Any]:
         "twilio_from_number": tw_from,
         "twilio_alert_to": tw_to,
         "smtp_email": smtp_email,
+        **oauth_ready,
     }
+
+
+@router.get("/broker-oauth/start")
+def broker_oauth_start(
+    broker: str = Query(..., description="Broker id"),
+    redirect_uri: str = Query(..., description="Frontend callback URL"),
+) -> RedirectResponse:
+    b = broker.strip().lower().replace(" ", "_")
+    if b not in _BROKERS:
+        raise HTTPException(status_code=400, detail="Unsupported broker")
+    authorize_url = broker_oauth_authorize_url(b)
+    client_id = broker_oauth_client_id(b)
+    if not _configured(authorize_url) or not _configured(client_id):
+        raise HTTPException(status_code=503, detail=f"{b} OAuth is not configured")
+    state = create_state(b, redirect_uri)
+    q: dict[str, str] = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "state": state,
+    }
+    scope = broker_oauth_scope(b)
+    if _configured(scope):
+        q["scope"] = scope
+    sep = "&" if "?" in authorize_url else "?"
+    return RedirectResponse(url=f"{authorize_url}{sep}{urlencode(q)}", status_code=307)
+
+
+@router.get("/broker-oauth/callback")
+def broker_oauth_callback(
+    broker: str = Query(..., description="Broker id"),
+    code: str | None = Query(None, description="OAuth auth code"),
+    state: str | None = Query(None, description="OAuth state"),
+    error: str | None = Query(None, description="Provider error"),
+) -> RedirectResponse:
+    b = broker.strip().lower().replace(" ", "_")
+    if b not in _BROKERS:
+        raise HTTPException(status_code=400, detail="Unsupported broker")
+    if not state:
+        raise HTTPException(status_code=400, detail="Missing OAuth state")
+    st = consume_state(state, b)
+    if not st:
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+    redirect_uri = str(st.get("redirect_uri") or "")
+    if not redirect_uri:
+        raise HTTPException(status_code=400, detail="Missing redirect URI")
+
+    status = "error"
+    msg = ""
+    if error:
+        status = "error"
+        msg = error
+    elif not code:
+        status = "error"
+        msg = "missing_code"
+    else:
+        token_url = broker_oauth_token_url(b)
+        client_id = broker_oauth_client_id(b)
+        client_secret = broker_oauth_client_secret(b)
+        if _configured(token_url) and _configured(client_id) and _configured(client_secret):
+            try:
+                form = {
+                    "grant_type": "authorization_code",
+                    "code": code,
+                    "redirect_uri": redirect_uri,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                }
+                with httpx.Client(timeout=25.0, follow_redirects=True) as c:
+                    r = c.post(token_url, data=form)
+                    r.raise_for_status()
+                    tok = r.json() if r.headers.get("content-type", "").lower().find("json") >= 0 else {}
+                set_connected(
+                    b,
+                    token_type=str((tok or {}).get("token_type") or "") or None,
+                    has_access_token=bool((tok or {}).get("access_token")),
+                    has_refresh_token=bool((tok or {}).get("refresh_token")),
+                    scope=str((tok or {}).get("scope") or "") or None,
+                )
+                status = "connected"
+                msg = "OAuth connected and token exchange succeeded."
+            except Exception as e:
+                status = "error"
+                msg = f"token_exchange_failed:{type(e).__name__}"
+        else:
+            status = "auth_only"
+            msg = "OAuth code received. Configure token endpoint + client secret to finish connection."
+
+    sep = "&" if "?" in redirect_uri else "?"
+    qs = urlencode({"broker": b, "oauth_status": status, "oauth_message": msg})
+    return RedirectResponse(url=f"{redirect_uri}{sep}{qs}", status_code=307)
+
+
+@router.get("/broker-oauth/connections")
+def broker_oauth_connections() -> dict[str, Any]:
+    return {"connections": get_connections()}
 
 
 @router.get("/alert-email")

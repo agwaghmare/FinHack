@@ -131,3 +131,28 @@ def alpaca_key_id() -> str:
 
 def alpaca_secret_key() -> str:
     return _get("ALPACA_API_SECRET_KEY", "APCA_API_SECRET_KEY", "ALPACA_SECRET")
+
+
+def broker_oauth_client_id(broker: str) -> str:
+    b = (broker or "").strip().upper().replace(" ", "_")
+    return _get(f"{b}_OAUTH_CLIENT_ID")
+
+
+def broker_oauth_authorize_url(broker: str) -> str:
+    b = (broker or "").strip().upper().replace(" ", "_")
+    return _get(f"{b}_OAUTH_AUTHORIZE_URL")
+
+
+def broker_oauth_scope(broker: str) -> str:
+    b = (broker or "").strip().upper().replace(" ", "_")
+    return _get(f"{b}_OAUTH_SCOPE")
+
+
+def broker_oauth_client_secret(broker: str) -> str:
+    b = (broker or "").strip().upper().replace(" ", "_")
+    return _get(f"{b}_OAUTH_CLIENT_SECRET")
+
+
+def broker_oauth_token_url(broker: str) -> str:
+    b = (broker or "").strip().upper().replace(" ", "_")
+    return _get(f"{b}_OAUTH_TOKEN_URL")
