@@ -76,6 +76,9 @@ export const api = {
   /** Earnings dates in the next N days (watchlist universe). */
   marketEarningsWeek: (days = 7) =>
     j(`/market/earnings-week?days=${encodeURIComponent(String(days))}`),
+  /** Main points from latest forms + transcript cues. */
+  marketEarningsBrief: (symbol: string) =>
+    j(`/market/earnings-brief?symbol=${encodeURIComponent(symbol)}`),
   /** Approximate macro release calendar (FOMC, NFP, CPI, GDP). */
   marketMacroEvents: (horizonDays = 90) =>
     j(
@@ -102,6 +105,8 @@ export const api = {
   narrativeDigest: (limit = 72) =>
     j(`/news/narrative-digest?limit=${encodeURIComponent(String(limit))}`),
   macro: () => j("/macro/indicators"),
+  /** HMM + rules regime + optional Mistral narrative (can be slow). */
+  portfolioRegime: () => j("/portfolio/regime"),
   /** FRED time series for macro trend charts (default ~1y window). */
   macroHistory: (years = 1) =>
     j(`/macro/indicators/history?years=${encodeURIComponent(String(years))}`),
@@ -222,8 +227,24 @@ export const api = {
       body: JSON.stringify({ user_id: userId, body }),
     }),
   clerkConfig: () => j<{ publishable_key?: string }>("/auth/clerk-config"),
+  /** Signed-in: optional SMTP destination override (Clerk private_metadata). */
+  alertEmailGet: () => j<{ alert_email?: string | null }>("/auth/alert-email"),
+  alertEmailPatch: (email: string | null) =>
+    j<{ ok?: boolean; alert_email?: string | null }>("/auth/alert-email", {
+      method: "PATCH",
+      body: JSON.stringify({ email }),
+    }),
   integrationStatus: () =>
     j<Record<string, boolean>>("/auth/integration-status"),
+  brokerOauthStartUrl: (broker: string, redirectUri: string, state = "") => {
+    const q = new URLSearchParams({ broker, redirect_uri: redirectUri });
+    if (state) q.set("state", state);
+    return `${base}/auth/broker-oauth/start?${q.toString()}`;
+  },
+  brokerOauthCallbackUrl: (broker: string) =>
+    `${base}/auth/broker-oauth/callback?broker=${encodeURIComponent(broker)}`,
+  brokerOauthConnections: () =>
+    j<{ connections?: Array<Record<string, unknown>> }>("/auth/broker-oauth/connections"),
   health: () =>
     j<{
       status?: string;
@@ -247,6 +268,28 @@ export const api = {
     }),
   alertSend: (payload: Record<string, unknown>) =>
     j("/alerts/send", { method: "POST", body: JSON.stringify(payload) }),
+  /** Webhook / SMS / email env status (no secrets). */
+  alertDelivery: () =>
+    j<{
+      webhook?: boolean;
+      sms?: boolean;
+      email?: boolean;
+      any_channel?: boolean;
+    }>("/alerts/delivery"),
+  /** Signed-in user: live risk signals (requires Clerk JWT). */
+  alertSignals: (opts?: { riskAlert?: number; concentration?: number }) => {
+    const q = new URLSearchParams();
+    if (opts?.riskAlert != null) q.set("risk_alert_threshold", String(opts.riskAlert));
+    if (opts?.concentration != null) q.set("concentration_threshold", String(opts.concentration));
+    const qs = q.toString();
+    return j(`/alerts/signals${qs ? `?${qs}` : ""}`);
+  },
+  /** Send full digest to configured channels (requires Clerk JWT). */
+  alertDigest: (body?: Record<string, unknown>) =>
+    j("/alerts/digest", {
+      method: "POST",
+      body: JSON.stringify(body ?? {}),
+    }),
 };
 
 export async function postVoice(text: string): Promise<Blob> {

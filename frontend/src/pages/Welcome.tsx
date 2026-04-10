@@ -24,7 +24,7 @@ const tiers = [
     highlights: [
       "Real portfolio: return, CAGR, AI holdings coach",
       "Insights: news AI, paper-lab strategy, cross-asset chains",
-      "Paper Lab, alerts, webhook tests",
+      "Paper Lab, alerts (SMS / email)",
     ],
     cta: "Choose Plus",
     featured: true,

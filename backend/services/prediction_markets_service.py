@@ -14,6 +14,21 @@ logger = logging.getLogger(__name__)
 GAMMA_MARKETS = "https://gamma-api.polymarket.com/markets"
 
 
+def _event_slug_for_polymarket_link(m: dict[str, Any]) -> str:
+    """
+    Gamma market `slug` is often a per-outcome id (e.g. ...-april-30-899) that does not match
+    polymarket.com/event/{slug}. The public site uses the parent event's slug from `events[0]`.
+    """
+    events = m.get("events")
+    if isinstance(events, list) and events:
+        ev0 = events[0]
+        if isinstance(ev0, dict):
+            s = str(ev0.get("slug") or "").strip()
+            if s:
+                return s
+    return str(m.get("slug") or "").strip()
+
+
 def get_hot_polymarket_markets(limit: int = 8) -> dict[str, Any]:
     """
     Returns active markets sorted by 24h notional volume (hottest trading).
@@ -54,7 +69,7 @@ def get_hot_polymarket_markets(limit: int = 8) -> dict[str, Any]:
         q = str(m.get("question") or "").strip()
         if not q:
             continue
-        slug = str(m.get("slug") or "").strip()
+        slug = _event_slug_for_polymarket_link(m)
         url = f"https://polymarket.com/event/{slug}" if slug else "https://polymarket.com/"
         vol24 = m.get("volume24hr") or m.get("volume24hrClob") or 0
         try:

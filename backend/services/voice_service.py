@@ -1,86 +1,76 @@
-import logging
 import os
-
-import requests
-
-from backend.utils.env_keys import elevenlabs_key
-
-logger = logging.getLogger(__name__)
-
-
-def _speak_once(
-    *,
-    key: str,
-    text: str,
-    voice_id: str,
-    model_id: str,
-    voice_settings: dict,
-) -> requests.Response:
-    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-    headers = {
-        "xi-api-key": key,
-        "Content-Type": "application/json",
-        "Accept": "audio/mpeg",
-    }
-    payload = {
-        "text": text[:5000],
-        "model_id": model_id,
-        "voice_settings": voice_settings,
-    }
-    return requests.post(url, json=payload, headers=headers, timeout=120)
+import tempfile
+import asyncio
 
 
 def text_to_speech(text: str) -> bytes:
-    key = elevenlabs_key()
-    if not key or key == "YOUR_KEY":
-        raise ValueError(
-            "ELEVENLABS_API_KEY (or elevenlabs_key in .env) is not set or invalid"
-        )
+    raw = (text or "").strip()
+    if not raw:
+        raise ValueError("text is required")
+    # Prefer Edge neural voices first (far less robotic than local SAPI).
+    voice = (os.getenv("EDGE_TTS_VOICE") or "en-US-JennyNeural").strip()
+    rate = (os.getenv("EDGE_TTS_RATE") or "-2%").strip()
+    pitch = (os.getenv("EDGE_TTS_PITCH") or "+0Hz").strip()
+    try:
+        import edge_tts  # type: ignore[import-untyped]
 
-    # Warmer default voice for market briefings; can still override via .env
-    voice_id = (os.getenv("ELEVENLABS_VOICE_ID") or "EXAVITQu4vr4xnSDxMaL").strip()
-    # Fallback warm voice if configured voice is invalid/not found.
-    fallback_voice_id = "EXAVITQu4vr4xnSDxMaL"
-    model_id = os.getenv("ELEVENLABS_MODEL_ID") or "eleven_multilingual_v2"
+        async def _render() -> bytes:
+            communicate = edge_tts.Communicate(raw[:5000], voice=voice, rate=rate, pitch=pitch)
+            chunks: list[bytes] = []
+            async for chunk in communicate.stream():
+                if chunk.get("type") == "audio":
+                    data = chunk.get("data")
+                    if isinstance(data, (bytes, bytearray)):
+                        chunks.append(bytes(data))
+            return b"".join(chunks)
 
-    voice_settings = {
-        # Less robotic profile: more expressive cadence + strong voice match.
-        "stability": float(os.getenv("ELEVENLABS_STABILITY", "0.18")),
-        "similarity_boost": float(os.getenv("ELEVENLABS_SIMILARITY", "0.92")),
-    }
-    style_raw = os.getenv("ELEVENLABS_STYLE", "").strip()
-    if style_raw:
+        audio = asyncio.run(_render())
+        if audio:
+            return audio
+    except Exception:
+        # Fall through to local pyttsx3 fallback.
+        pass
+
+    try:
+        import pyttsx3  # type: ignore[import-untyped]
+    except Exception as e:
+        raise RuntimeError(
+            "TTS engines unavailable. Install edge-tts (preferred) or pyttsx3."
+        ) from e
+
+    engine = pyttsx3.init()
+    # Slower cadence + full volume sounds more human on SAPI voices.
+    engine.setProperty("rate", int(os.getenv("PYTTSX3_RATE", "155")))
+    engine.setProperty("volume", float(os.getenv("PYTTSX3_VOLUME", "1.0")))
+    try:
+        voices = engine.getProperty("voices") or []
+        preferred = None
+        for v in voices:
+            name = str(getattr(v, "name", "")).lower()
+            vid = str(getattr(v, "id", "")).lower()
+            if any(k in name for k in ("zira", "aria", "jenny", "samantha")):
+                preferred = v
+                break
+            if "female" in name or "female" in vid:
+                preferred = v
+                break
+        if preferred is None and voices:
+            preferred = voices[0]
+        if preferred is not None:
+            engine.setProperty("voice", getattr(preferred, "id"))
+    except Exception:
+        # Keep default voice if lookup fails on this platform.
+        pass
+
+    fd, path = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    try:
+        engine.save_to_file(raw[:5000], path)
+        engine.runAndWait()
+        with open(path, "rb") as f:
+            return f.read()
+    finally:
         try:
-            voice_settings["style"] = float(style_raw)
-        except ValueError:
+            os.remove(path)
+        except OSError:
             pass
-
-    response = _speak_once(
-        key=key,
-        text=text,
-        voice_id=voice_id,
-        model_id=model_id,
-        voice_settings=voice_settings,
-    )
-    # Auto-retry once with warm fallback voice for misconfigured IDs (e.g., "alloy").
-    if response.status_code == 404 and "voice_not_found" in (response.text or "") and voice_id != fallback_voice_id:
-        logger.warning("Configured ElevenLabs voice '%s' not found. Retrying with fallback voice.", voice_id)
-        response = _speak_once(
-            key=key,
-            text=text,
-            voice_id=fallback_voice_id,
-            model_id=model_id,
-            voice_settings=voice_settings,
-        )
-
-    if response.status_code >= 400:
-        detail = response.text[:500]
-        logger.error("ElevenLabs error %s: %s", response.status_code, detail)
-        if response.status_code == 402:
-            raise RuntimeError(
-                "ElevenLabs returned 402: paid plan required for API text-to-speech on many accounts. "
-                "Upgrade at elevenlabs.io or use the in-app “read aloud” (browser) fallback."
-            )
-        raise RuntimeError(f"ElevenLabs API {response.status_code}: {detail}")
-
-    return response.content

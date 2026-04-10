@@ -24,6 +24,7 @@ from backend.services.market_podcast_service import (
     get_latest_podcast_script,
 )
 from backend.services.earnings_week_service import get_earnings_this_week
+from backend.services.earnings_brief_service import get_earnings_brief
 from backend.services.macro_events_service import get_upcoming_macro_events
 from backend.services.prediction_markets_service import get_hot_polymarket_markets
 from backend.services.peer_suggest_service import suggest_sector_peers
@@ -67,6 +68,14 @@ def market_earnings_week(
 ):
     """Upcoming earnings in the watchlist universe (yfinance calendar)."""
     return get_earnings_this_week(days=days)
+
+
+@router.get("/earnings-brief")
+def market_earnings_brief(
+    symbol: str = Query(..., min_length=1, max_length=32, description="Ticker e.g. AAPL"),
+):
+    """Main points from recent SEC forms plus transcript-like earnings cues."""
+    return get_earnings_brief(symbol)
 
 
 @router.get("/macro-events")

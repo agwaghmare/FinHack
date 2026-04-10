@@ -81,6 +81,16 @@ export function PodcastPlayer({ audioUrl, scriptText, title = "Market close" }: 
         return;
       }
       const u = new SpeechSynthesisUtterance(scriptText);
+      // Tune browser TTS for a more natural, less robotic cadence.
+      u.rate = 0.95;
+      u.pitch = 1.0;
+      u.volume = 1.0;
+      const voices = window.speechSynthesis.getVoices();
+      const preferred =
+        voices.find((v) => /en-us|en_us/i.test(v.lang) && /aria|jenny|zira|davis|samantha|google us english/i.test(v.name)) ??
+        voices.find((v) => /en-us|en_us/i.test(v.lang)) ??
+        voices[0];
+      if (preferred) u.voice = preferred;
       const start = Date.now();
       setTtsActive(true);
       setTtsElapsed(0);

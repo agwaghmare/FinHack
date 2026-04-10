@@ -1,20 +1,17 @@
 import { type FormEvent, useEffect, useState } from "react";
-import {
-  Loader2,
-  Mic,
-  PieChart,
-  Search,
-  X,
-} from "lucide-react";
+import { Loader2, Mic, PieChart, Search, Star, X } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
+import { addWatchlistSymbol, getWatchlist } from "../lib/watchlistStorage";
 import { Link } from "react-router-dom";
 import {
   api,
   getMarketPodcastLatest,
+  getMarketPodcastLatestScript,
   postMarketAudioSummary,
   postMarketPodcastGenerate,
   type PodcastSession,
 } from "../lib/api";
+import { MorningBriefing } from "../components/MorningBriefing";
 import { LoginStreakBanner as PulseLoginStreakBanner } from "../components/LoginStreakBanner";
 import { PodcastPlayer } from "../components/PodcastPlayer";
 import { StockInfoPanel } from "../components/StockInfoPanel";
@@ -88,12 +85,9 @@ type EarningsWeekItem = {
   within_days: number;
 };
 
-type MacroEventRow = {
-  id: string;
-  name: string;
-  date: string;
-  time_hint?: string;
-  category?: string;
+type EarningsBrief = {
+  symbol: string;
+  main_points: string[];
 };
 
 type PredictionMarketRow = {
@@ -186,7 +180,7 @@ function barsPerf(rawBars: unknown, stepsBack: number): number | null {
   return pctBetween(now, prev);
 }
 
-const MARKET_CAP_LEADERS = [
+const ATTENTION_LEADERS_UNIVERSE = [
   "AAPL",
   "MSFT",
   "NVDA",
@@ -194,7 +188,10 @@ const MARKET_CAP_LEADERS = [
   "GOOGL",
   "META",
   "TSLA",
-  "BRK.B",
+  "AMD",
+  "PLTR",
+  "NFLX",
+  "COIN",
 ];
 
 function CapLeaderCard({
@@ -388,13 +385,14 @@ export function Market() {
   const [podcastBusy, setPodcastBusy] = useState(false);
   const [podcastCloseAt, setPodcastCloseAt] = useState<string | null>(null);
   const [podcastOpenAt, setPodcastOpenAt] = useState<string | null>(null);
+  const [podcastCloseScript, setPodcastCloseScript] = useState<string | null>(null);
+  const [podcastOpenScript, setPodcastOpenScript] = useState<string | null>(null);
   const [expandedLeader, setExpandedLeader] = useState<string | null>(null);
   const [earningsItems, setEarningsItems] = useState<EarningsWeekItem[]>([]);
-  const [macroEvents, setMacroEvents] = useState<MacroEventRow[]>([]);
-  const [macroDisclaimer, setMacroDisclaimer] = useState<string | null>(null);
   const [predictionMarkets, setPredictionMarkets] = useState<PredictionMarketRow[]>([]);
   const [predictionDisclaimer, setPredictionDisclaimer] = useState<string | null>(null);
-  const [capLeaders, setCapLeaders] = useState<Quote[]>([]);
+  const [attentionLeaders, setAttentionLeaders] = useState<Quote[]>([]);
+  const [earningsBriefs, setEarningsBriefs] = useState<Record<string, EarningsBrief>>({});
   const [portfolioPerf, setPortfolioPerf] = useState<PortfolioPerfPayload | null>(null);
   const [portfolioCurve, setPortfolioCurve] = useState<PortfolioCurvePayload | null>(null);
   const [topPerformers, setTopPerformers] = useState<TopPerformersPayload | null>(null);
@@ -407,6 +405,7 @@ export function Market() {
   const [compareRows, setCompareRows] = useState<CompareRow[]>([]);
   const [compareLoading, setCompareLoading] = useState(false);
   const [peerCompareMessage, setPeerCompareMessage] = useState<string | null>(null);
+  const [watchlistToast, setWatchlistToast] = useState<string | null>(null);
   const [narrativeBuckets, setNarrativeBuckets] = useState<NarrativeBuckets | null>(null);
   const [narrativeLoading, setNarrativeLoading] = useState(true);
 
@@ -414,12 +413,10 @@ export function Market() {
     let cancelled = false;
     (async () => {
       try {
-        const [px, earningsRaw, macroRaw, polyRaw, capBatch, narrativeRaw] = await Promise.all([
+        const [px, earningsRaw, polyRaw, narrativeRaw] = await Promise.all([
           api.marketPrices("BTC,ETH"),
           api.marketEarningsWeek(7).catch(() => null),
-          api.marketMacroEvents(90).catch(() => null),
           api.marketPredictionMarkets(8).catch(() => null),
-          api.marketPrices(MARKET_CAP_LEADERS.join(",")),
           api.narrativeDigest(72).catch(() => null),
         ]);
         if (cancelled) return;
@@ -437,22 +434,16 @@ export function Market() {
         );
         const earn = (earningsRaw as { items?: EarningsWeekItem[] } | null)?.items ?? [];
         setEarningsItems(earn);
-        const ev = (macroRaw as { events?: MacroEventRow[]; disclaimer?: string } | null)?.events ?? [];
-        setMacroEvents(ev.slice(0, 12));
-        setMacroDisclaimer((macroRaw as { disclaimer?: string } | null)?.disclaimer ?? null);
         const mk = (polyRaw as { markets?: PredictionMarketRow[]; disclaimer?: string } | null)?.markets ?? [];
         setPredictionMarkets(mk);
         setPredictionDisclaimer((polyRaw as { disclaimer?: string } | null)?.disclaimer ?? null);
-        setCapLeaders(((capBatch as { quotes?: Quote[] }).quotes ?? []).slice(0, 8));
       } catch {
         if (!cancelled) {
           setQuotes([]);
           setEarningsItems([]);
-          setMacroEvents([]);
-          setMacroDisclaimer(null);
           setPredictionMarkets([]);
           setPredictionDisclaimer(null);
-          setCapLeaders([]);
+          setAttentionLeaders([]);
           setNarrativeBuckets({
             macro: null,
             sector: null,
@@ -472,6 +463,56 @@ export function Market() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const uid = user?.id ?? "guest";
+        const wl = new Set(getWatchlist(uid).map((s) => s.toUpperCase()));
+        const universe = ATTENTION_LEADERS_UNIVERSE;
+        const pxRaw = (await api.marketPrices(universe.join(","))) as { quotes?: Quote[] };
+        const px = pxRaw.quotes ?? [];
+        const rows = await Promise.all(
+          universe.map(async (sym) => {
+            const quote = px.find((q) => (q.symbol ?? "").toUpperCase() === sym) ?? { symbol: sym };
+            const [histRaw, newsRaw] = await Promise.all([
+              api.marketHistory(sym, "3mo", "1d").catch(() => ({})),
+              api.marketNews(sym, 16).catch(() => ({})),
+            ]);
+            const bars = ((histRaw as { bars?: Array<{ volume?: number; close?: number }> }).bars ?? []).filter(
+              (b) => typeof b?.volume === "number" && typeof b?.close === "number",
+            );
+            const vols = bars.map((b) => Number(b.volume ?? 0)).filter((v) => Number.isFinite(v) && v > 0);
+            const closes = bars.map((b) => Number(b.close ?? 0)).filter((v) => Number.isFinite(v) && v > 0);
+            const latestVol = vols.length ? vols[vols.length - 1] : 0;
+            const avgVol = vols.length > 5 ? vols.slice(-21, -1).reduce((a, b) => a + b, 0) / Math.max(1, Math.min(20, vols.length - 1)) : 0;
+            const relVol = avgVol > 0 ? latestVol / avgVol : 0;
+            const priceNow = closes.length ? closes[closes.length - 1] : Number(quote.price ?? 0);
+            const dollarVol = latestVol * Math.max(priceNow, 0);
+            const ch = Math.abs(Number.parseFloat(String(quote.change_percent ?? "0")) || 0);
+            const articles = ((newsRaw as { articles?: Array<{ title?: string }> }).articles ?? []);
+            const buzz = articles.length;
+            const keywordHits = articles.filter((a) =>
+              /(options|reddit|retail|meme|search|watchlist|call volume|put volume)/i.test(String(a?.title ?? "")),
+            ).length;
+            const watchBoost = wl.has(sym) ? 2 : 0;
+            const flowScore = relVol * 35 + Math.log10(Math.max(dollarVol, 1)) * 8 + ch * 2;
+            const retailScore = buzz * 1.5 + keywordHits * 6 + watchBoost * 10;
+            const combined = flowScore * 0.6 + retailScore * 0.4;
+            return { ...quote, symbol: sym, attention_score: combined } as Quote & { attention_score: number };
+          }),
+        );
+        rows.sort((a, b) => b.attention_score - a.attention_score);
+        if (!cancelled) setAttentionLeaders(rows.slice(0, 8));
+      } catch {
+        if (!cancelled) setAttentionLeaders([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (!clerkLoaded || !user?.id) {
@@ -609,6 +650,21 @@ export function Market() {
             setPodcastOpenAt(null);
           }
         }
+        try {
+          const s = await getMarketPodcastLatestScript(session);
+          if (cancelled) return;
+          if (session === "close") {
+            setPodcastCloseScript((s.script ?? "").trim() || null);
+            if (!podcastCloseAt) setPodcastCloseAt(s.generatedAt ?? null);
+          } else {
+            setPodcastOpenScript((s.script ?? "").trim() || null);
+            if (!podcastOpenAt) setPodcastOpenAt(s.generatedAt ?? null);
+          }
+        } catch {
+          if (cancelled) return;
+          if (session === "close") setPodcastCloseScript(null);
+          else setPodcastOpenScript(null);
+        }
       };
       await load("close");
       await load("open");
@@ -661,6 +717,20 @@ export function Market() {
     }
   }
 
+  function addTickerToWatchlist() {
+    const s = stockLookupInput.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
+    if (!s) {
+      setWatchlistToast("Enter a ticker first");
+      window.setTimeout(() => setWatchlistToast(null), 2200);
+      return;
+    }
+    const uid = user?.id ?? "guest";
+    const had = getWatchlist(uid).includes(s);
+    addWatchlistSymbol(uid, s);
+    setWatchlistToast(had ? `${s} already on your watchlist` : `Added ${s} — also on Dashboard`);
+    window.setTimeout(() => setWatchlistToast(null), 2800);
+  }
+
   async function openStockLookupModal(e?: FormEvent) {
     e?.preventDefault();
     const s = stockLookupInput.trim().toUpperCase().replace(/[^A-Z0-9.\-]/g, "");
@@ -669,6 +739,31 @@ export function Market() {
     setStockLookupOpen(true);
     await applyDefaultPeersForSymbol(s);
   }
+
+  async function loadEarningsBrief(symbol: string) {
+    const sym = symbol.trim().toUpperCase();
+    if (!sym || earningsBriefs[sym]) return;
+    try {
+      const raw = (await api.marketEarningsBrief(sym)) as { symbol?: string; main_points?: string[] };
+      const key = (raw.symbol ?? sym).toUpperCase();
+      setEarningsBriefs((prev) => ({
+        ...prev,
+        [key]: { symbol: key, main_points: raw.main_points ?? [] },
+      }));
+    } catch {
+      setEarningsBriefs((prev) => ({
+        ...prev,
+        [sym]: { symbol: sym, main_points: ["Could not load filing/transcript summary right now."] },
+      }));
+    }
+  }
+
+  useEffect(() => {
+    if (!earningsItems.length) return;
+    earningsItems.slice(0, 4).forEach((row) => {
+      void loadEarningsBrief(row.symbol);
+    });
+  }, [earningsItems]);
 
   function applyComparisonSymbols() {
     const parsed = compareInput
@@ -684,6 +779,14 @@ export function Market() {
     setPodcastBusy(true);
     try {
       await postMarketPodcastGenerate(session);
+      try {
+        const s = await getMarketPodcastLatestScript(session);
+        if (session === "close") setPodcastCloseScript((s.script ?? "").trim() || null);
+        else setPodcastOpenScript((s.script ?? "").trim() || null);
+      } catch {
+        if (session === "close") setPodcastCloseScript(null);
+        else setPodcastOpenScript(null);
+      }
       try {
         const out = await getMarketPodcastLatest(session);
         if (session === "close") {
@@ -746,10 +849,22 @@ export function Market() {
           <Search className="h-3.5 w-3.5" />
           Open
         </button>
+        <button
+          type="button"
+          onClick={addTickerToWatchlist}
+          className="inline-flex items-center gap-2 rounded-full border border-amber-600/50 bg-amber-950/30 px-4 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-950/50"
+        >
+          <Star className="h-3.5 w-3.5" />
+          Watchlist
+        </button>
         <p className="w-full text-[11px] text-zinc-500 sm:w-auto sm:pl-2">
-          Opens an overlay with chart and fundamentals — you stay on Market Pulse.
+          Open — chart &amp; fundamentals. Watchlist — appears below next to your portfolio (watchlist &amp; sector
+          mix).
         </p>
       </form>
+      {watchlistToast ? (
+        <p className="text-xs font-medium text-emerald-400/90">{watchlistToast}</p>
+      ) : null}
 
       <PulseLoginStreakBanner />
 
@@ -815,7 +930,7 @@ export function Market() {
                 <p className="mt-2 text-[11px] text-zinc-500">
                   {podcastOpenAt ? `Last generated: ${podcastOpenAt}` : "Not generated yet."}
                 </p>
-                <PodcastPlayer audioUrl={podcastOpenUrl} title="Market open" />
+                <PodcastPlayer audioUrl={podcastOpenUrl} scriptText={podcastOpenScript} title="Market open" />
               </div>
               <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/50 p-4">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-zinc-400">Market close · 4:05pm ET</h3>
@@ -833,7 +948,7 @@ export function Market() {
                 <p className="mt-2 text-[11px] text-zinc-500">
                   {podcastCloseAt ? `Last generated: ${podcastCloseAt}` : "Not generated yet."}
                 </p>
-                <PodcastPlayer audioUrl={podcastCloseUrl} title="Market close" />
+                <PodcastPlayer audioUrl={podcastCloseUrl} scriptText={podcastCloseScript} title="Market close" />
               </div>
             </div>
           </div>
@@ -1077,6 +1192,7 @@ export function Market() {
                       setStockModalSymbol(sym);
                       setStockLookupOpen(true);
                       void applyDefaultPeersForSymbol(sym);
+                      void loadEarningsBrief(sym);
                     }}
                   >
                     <div className="min-w-0">
@@ -1093,57 +1209,65 @@ export function Market() {
               })
             )}
           </div>
+          {!loading && earningsItems.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              {earningsItems.slice(0, 4).map((row) => {
+                const sym = row.symbol.toUpperCase();
+                const brief = earningsBriefs[sym];
+                return (
+                  <div key={`brief-${sym}`} className="rounded-lg border border-zinc-800/60 bg-zinc-900/40 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                        {sym} main points
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => void loadEarningsBrief(sym)}
+                        className="text-[10px] text-amber-400 hover:text-amber-300"
+                      >
+                        {brief ? "Refresh" : "Load summary"}
+                      </button>
+                    </div>
+                    {brief?.main_points?.length ? (
+                      <ul className="mt-2 space-y-1.5 text-xs text-zinc-300">
+                        {brief.main_points.slice(0, 4).map((p, i) => (
+                          <li key={`${sym}-p-${i}`}>- {p}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-[11px] text-zinc-500">
+                        Pulling latest filing/transcript highlights from recent reports.
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
 
-          <div className="mt-6 border-t border-zinc-800 pt-5">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Upcoming macro</h2>
-            <p className="mt-1 text-xs text-zinc-500">
-              Key US releases (approximate dates — verify on official calendars). FOMC, jobs Friday, CPI proxy, GDP
-              advance.
-            </p>
-            {macroDisclaimer ? (
-              <p className="mt-2 text-[10px] leading-relaxed text-zinc-600">{macroDisclaimer}</p>
-            ) : null}
-            <ul className="mt-3 space-y-2 text-sm">
-              {loading ? (
-                <li className="text-zinc-500">Loading macro calendar…</li>
-              ) : macroEvents.length === 0 ? (
-                <li className="text-zinc-500">No macro events in this horizon.</li>
-              ) : (
-                macroEvents.map((ev) => (
-                  <li
-                    key={ev.id}
-                    className="flex flex-col gap-0.5 rounded-lg border border-zinc-800/60 bg-zinc-900/30 px-3 py-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3"
-                  >
-                    <div className="min-w-0">
-                      <p className="font-medium text-zinc-200">{ev.name}</p>
-                      {ev.time_hint ? <p className="text-[11px] text-zinc-500">{ev.time_hint}</p> : null}
-                    </div>
-                    <div className="shrink-0 text-right text-xs text-zinc-400">
-                      <p className="tabular-nums">{fmtIsoDateShort(ev.date)}</p>
-                      {ev.category ? (
-                        <p className="mt-0.5 text-[10px] uppercase tracking-wide text-zinc-600">{ev.category}</p>
-                      ) : null}
-                    </div>
-                  </li>
-                ))
-              )}
-            </ul>
-          </div>
+          <MorningBriefing variant="embedded" />
+          <p className="mt-3 text-[11px] text-zinc-600">
+            For release dates and macro regime detail, open{" "}
+            <Link className="text-sky-400/90 underline underline-offset-2" to="/macro-regime">
+              Macro &amp; hard assets
+            </Link>
+            .
+          </p>
         </section>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-2 2xl:grid-cols-3 xl:items-start 2xl:items-start">
-        <section className="glass h-fit rounded-2xl p-5">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 items-start">
+        <section className="glass aspect-square min-h-[24rem] overflow-y-auto rounded-2xl p-5">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
-            Market-cap weighted leaders
+            Flow + retail attention leaders
           </h2>
           <p className="mt-2 text-sm text-zinc-400">
-            Largest-cap names often drive index direction. Track these stocks first during high-volume sessions.
+            Combined ranking: unusual/relative volume + dollar flow with retail attention (watchlist/news/options buzz).
           </p>
           <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-2 2xl:grid-cols-2">
-            {capLeaders.map((q, i) => (
+            {attentionLeaders.map((q, i) => (
               <CapLeaderCard
-                key={`cap-${q.symbol}-${i}`}
+                key={`attention-${q.symbol}-${i}`}
                 q={q}
                 selected={expandedLeader === q.symbol}
                 onSelect={() =>
@@ -1159,7 +1283,10 @@ export function Market() {
           ) : null}
         </section>
 
-        <section id="narrative-digest" className="glass h-fit scroll-mt-24 rounded-2xl p-5">
+        <section
+          id="narrative-digest"
+          className="glass aspect-square min-h-[24rem] overflow-y-auto scroll-mt-24 rounded-2xl p-5"
+        >
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Narrative snapshot</h2>
           <p className="mt-2 text-sm text-zinc-400">
             One summary per lane from the live headline feed (keyword buckets — not editorial ranking). Open links for
@@ -1229,7 +1356,7 @@ export function Market() {
 
         <section
           id="prediction-markets"
-          className="glass h-fit scroll-mt-24 space-y-3 rounded-2xl p-5 xl:col-span-2 2xl:col-span-1"
+          className="glass aspect-square min-h-[24rem] overflow-y-auto scroll-mt-24 space-y-3 rounded-2xl p-5"
         >
           <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
             Hottest prediction markets

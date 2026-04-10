@@ -2,6 +2,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import {
   Activity,
+  Calculator,
   BellRing,
   BookOpen,
   Brain,
@@ -9,45 +10,110 @@ import {
   ChevronRight,
   FlaskConical,
   Gem,
+  Landmark,
+  LayoutDashboard,
+  ReceiptText,
+  Repeat,
   Settings,
+  Sparkles,
+  Target,
+  TrendingUp,
+  WalletCards,
   Wallet,
 } from "lucide-react";
 import clsx from "clsx";
 import { useClerkEnabled } from "./ClerkAuth";
 
-const groups = [
+const investGroups = [
   {
-    to: "/pulse",
+    to: "/invest/pulse",
     label: "Market Pulse",
     hint: "Live tape, sentiment, and research context — see how markets move before you size a view.",
     icon: Activity,
   },
   {
-    to: "/portfolio",
+    to: "/invest/portfolio",
     label: "My portfolio",
     hint: "Real positions with live marks; AI can coach on diversification and research next steps (not trade orders).",
     icon: Wallet,
   },
-  { to: "/paper-lab", label: "Paper Lab", hint: "Simulated trades, P&L, and leaderboard — experiment without capital risk.", icon: FlaskConical },
+  { to: "/invest/paper-lab", label: "Paper Lab", hint: "Simulated trades, P&L, and leaderboard — experiment without capital risk.", icon: FlaskConical },
   {
-    to: "/insights",
+    to: "/invest/insights",
     label: "Insights",
     hint: "AI summaries on news & paper portfolio, plus cross-asset chains — investment research support in plain English.",
     icon: Brain,
   },
   {
-    to: "/macro-regime",
+    to: "/invest/macro-regime",
     label: "Macro Regime",
     hint: "Oil, metals, ag proxies, macro context. Cross-asset stress lab lives on Learn.",
     icon: Gem,
   },
   {
-    to: "/learn",
+    to: "/invest/learn",
     label: "Learn Hub",
     hint: "Modules, quizzes, certificates, and an AI tutor for financial education & inclusion.",
     icon: BookOpen,
   },
-  { to: "/alerts", label: "Alerts Center", hint: "Risk, news, and webhook tests — your actionable signal inbox.", icon: BellRing },
+  { to: "/invest/alerts", label: "Alerts Center", hint: "Risk signals with SMS, email, or an optional HTTP endpoint.", icon: BellRing },
+];
+
+const trackGroups = [
+  {
+    to: "/track/overview",
+    label: "Overview",
+    hint: "Health score, cash-flow snapshot, and Track → Invest prompts.",
+    icon: LayoutDashboard,
+  },
+  {
+    to: "/track/spending",
+    label: "Spending",
+    hint: "Category breakdown, % of income, and behavior-style insights.",
+    icon: WalletCards,
+  },
+  {
+    to: "/track/budget",
+    label: "Budget",
+    hint: "Budget vs actual bars and over-spend alerts.",
+    icon: Calculator,
+  },
+  {
+    to: "/track/cash-flow",
+    label: "Cash flow",
+    hint: "Income, expenses, net savings trend.",
+    icon: TrendingUp,
+  },
+  {
+    to: "/track/subscriptions",
+    label: "Subscriptions",
+    hint: "Recurring charges and monthly total.",
+    icon: Repeat,
+  },
+  {
+    to: "/track/goals",
+    label: "Goals",
+    hint: "Emergency fund, vacation, down payment progress.",
+    icon: Target,
+  },
+  {
+    to: "/track/mortgage",
+    label: "Mortgage",
+    hint: "P/I split, payoff, and extra principal impact.",
+    icon: Landmark,
+  },
+  {
+    to: "/track/taxes",
+    label: "Taxes",
+    hint: "Simple federal estimate — not tax advice.",
+    icon: ReceiptText,
+  },
+  {
+    to: "/track/what-if",
+    label: "What-if",
+    hint: "If you invest freed cash monthly, see illustrative growth.",
+    icon: Sparkles,
+  },
 ];
 
 export function Sidebar({
@@ -59,6 +125,8 @@ export function Sidebar({
 }) {
   const clerkOn = useClerkEnabled();
   const location = useLocation();
+  const section = location.pathname.startsWith("/track") ? "track" : "invest";
+  const groups = section === "track" ? trackGroups : investGroups;
 
   return (
     <aside
@@ -132,6 +200,36 @@ export function Sidebar({
       ) : null}
 
       <nav className={clsx("flex flex-1 flex-col gap-1.5 overflow-y-auto", collapsed ? "" : "pr-1")}>
+        {!collapsed ? (
+          <div className="mb-3 grid grid-cols-2 gap-1 rounded-xl border border-zinc-800 bg-zinc-900/60 p-1">
+            <NavLink
+              to="/invest/pulse"
+              className={({ isActive }) =>
+                clsx(
+                  "rounded-lg px-3 py-1.5 text-center text-xs font-semibold transition",
+                  isActive || location.pathname.startsWith("/invest")
+                    ? "bg-zinc-100 text-zinc-900"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
+                )
+              }
+            >
+              Invest
+            </NavLink>
+            <NavLink
+              to="/track/overview"
+              className={({ isActive }) =>
+                clsx(
+                  "rounded-lg px-3 py-1.5 text-center text-xs font-semibold transition",
+                  isActive || location.pathname.startsWith("/track")
+                    ? "bg-zinc-100 text-zinc-900"
+                    : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100",
+                )
+              }
+            >
+              Track
+            </NavLink>
+          </div>
+        ) : null}
         {groups.map((g) => {
           const Icon = g.icon;
           const pathActive =
