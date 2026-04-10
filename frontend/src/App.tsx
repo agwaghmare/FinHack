@@ -1,5 +1,6 @@
 import { useAuth } from "@clerk/clerk-react";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
 import { Layout } from "./components/Layout";
 import {
   ClerkSignInPage,
@@ -18,6 +19,15 @@ import { Welcome } from "./pages/Welcome";
 import { RealPortfolio } from "./pages/RealPortfolio";
 import { Onboarding } from "./pages/Onboarding";
 import { RequireOnboarding } from "./components/RequireOnboarding";
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+
+}
 
 function WelcomeOrRedirect() {
   const clerkOn = useClerkEnabled();
@@ -45,6 +55,7 @@ function WelcomeOrRedirectAuthed() {
 export default function App() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         <Route path="/" element={<WelcomeOrRedirect />} />
         <Route path="/sign-in/*" element={<ClerkSignInPage />} />

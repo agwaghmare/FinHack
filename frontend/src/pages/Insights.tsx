@@ -740,7 +740,7 @@ function InsightsContent({ userId }: { userId: string }) {
             AI research support &amp; strategy framing
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Headlines from GNews and Yahoo, plus LLM panels (Gemini/OpenAI) for portfolio, news, and paper-lab strategy —
+            Headlines from GNews and Yahoo, plus LLM panels (Mistral AI) for portfolio, news, and paper-lab strategy —
             aligned with <strong className="font-medium text-zinc-600 dark:text-zinc-400">investment research</strong>{" "}
             support; combine with <strong className="font-medium text-zinc-600 dark:text-zinc-400">Learn Hub</strong> for
             education. Not personalized advice.
