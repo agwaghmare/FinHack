@@ -263,11 +263,26 @@ def _symbol_period_returns_pct(sym: str) -> dict[str, float | None]:
     now_ts = cast(pd.Timestamp, idx[-1])
 
     def pct_from(ts_target: pd.Timestamp) -> float | None:
+        """Last close on or before ts_target; handles empty slice when target is just before first bar."""
         try:
             sub = cast(pd.Series, closes[closes.index <= ts_target])
-            if len(sub) == 0:
-                return None
-            past = float(sub.iloc[-1])
+            if len(sub) > 0:
+                past = float(sub.iloc[-1])
+            else:
+                if len(closes) == 0:
+                    return None
+                first_ts = cast(pd.Timestamp, idx[0])
+                # If the series starts shortly after ts_target (weekends/holidays/period boundary),
+                # use the first bar — otherwise we'd show "—" for 5Y despite having a full 5y download.
+                if first_ts > ts_target:
+                    gap = first_ts - ts_target
+                    days = getattr(gap, "days", None)
+                    if days is not None and days <= 31:
+                        past = float(closes.iloc[0])
+                    else:
+                        return None
+                else:
+                    return None
             if past <= 0:
                 return None
             return (last / past - 1.0) * 100.0
@@ -290,11 +305,22 @@ def _symbol_period_returns_pct(sym: str) -> dict[str, float | None]:
         if first > 0:
             ytd_ret = (last / first - 1.0) * 100.0
 
+    ret_5y = pct_from(five_y_ago)
+    # If still missing (e.g. timezone quirks) but we have ~4+ years of bars, use first→last on this window.
+    if ret_5y is None and len(closes) >= 2:
+        first_ts = cast(pd.Timestamp, idx[0])
+        last_ts = cast(pd.Timestamp, idx[-1])
+        span_days = (last_ts - first_ts).days
+        if span_days >= 365 * 4:
+            first_px = float(closes.iloc[0])
+            if first_px > 0:
+                ret_5y = (last / first_px - 1.0) * 100.0
+
     return {
         "1m": pct_from(one_m_ago),
         "ytd": ytd_ret,
         "1y": pct_from(one_y_ago),
-        "5y": pct_from(five_y_ago),
+        "5y": ret_5y,
     }
 
 
