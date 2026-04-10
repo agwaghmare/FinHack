@@ -18,7 +18,17 @@ import { Welcome } from "./pages/Welcome";
 import { RealPortfolio } from "./pages/RealPortfolio";
 import { Onboarding } from "./pages/Onboarding";
 import { RequireOnboarding } from "./components/RequireOnboarding";
-import { Budget, Mortgage, Spending, Taxes } from "./pages/PersonalFinance";
+import {
+  TrackBudget,
+  TrackCashFlow,
+  TrackGoals,
+  TrackMortgage,
+  TrackOverview,
+  TrackSpending,
+  TrackSubscriptions,
+  TrackTaxes,
+  TrackWhatIf,
+} from "./pages/track";
 
 function WelcomeOrRedirect() {
   const clerkOn = useClerkEnabled();
@@ -63,10 +73,15 @@ export default function App() {
               <Route path="invest/ai" element={<Navigate to="/invest/insights" replace />} />
               <Route path="invest/learn" element={<Learn />} />
               <Route path="invest/alerts" element={<Alerts />} />
-              <Route path="track/spending" element={<Spending />} />
-              <Route path="track/budget" element={<Budget />} />
-              <Route path="track/mortgage" element={<Mortgage />} />
-              <Route path="track/taxes" element={<Taxes />} />
+              <Route path="track/overview" element={<TrackOverview />} />
+              <Route path="track/spending" element={<TrackSpending />} />
+              <Route path="track/budget" element={<TrackBudget />} />
+              <Route path="track/cash-flow" element={<TrackCashFlow />} />
+              <Route path="track/subscriptions" element={<TrackSubscriptions />} />
+              <Route path="track/goals" element={<TrackGoals />} />
+              <Route path="track/mortgage" element={<TrackMortgage />} />
+              <Route path="track/taxes" element={<TrackTaxes />} />
+              <Route path="track/what-if" element={<TrackWhatIf />} />
               <Route path="settings" element={<Settings />} />
               <Route path="market" element={<Navigate to="/invest/pulse" replace />} />
               <Route path="trade" element={<Navigate to="/invest/paper-lab" replace />} />
@@ -81,7 +96,7 @@ export default function App() {
               <Route path="ai" element={<Navigate to="/invest/insights" replace />} />
               <Route path="learn" element={<Navigate to="/invest/learn" replace />} />
               <Route path="alerts" element={<Navigate to="/invest/alerts" replace />} />
-              <Route path="track" element={<Navigate to="/track/spending" replace />} />
+              <Route path="track" element={<Navigate to="/track/overview" replace />} />
               <Route path="invest" element={<Navigate to="/invest/pulse" replace />} />
               <Route path="*" element={<Navigate to="/invest/pulse" replace />} />
             </Route>

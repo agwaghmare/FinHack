@@ -1,5 +1,6 @@
 import { Outlet } from "react-router-dom";
 import { useEffect, useState } from "react";
+import { TrackFinanceProvider } from "../context/TrackFinanceContext";
 import { DigestReminder } from "./DigestReminder";
 import { Sidebar } from "./Sidebar";
 
@@ -24,14 +25,16 @@ export function Layout() {
   }, [sidebarCollapsed]);
 
   return (
-    <div className="min-h-full bg-gradient-to-br from-zinc-100 via-white to-zinc-100 dark:from-black dark:via-zinc-950 dark:to-black">
-      <DigestReminder />
-      <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((p) => !p)} />
-      <main className={sidebarCollapsed ? "pl-20" : "pl-72"}>
-        <div className="mx-auto w-full max-w-none px-3 py-10 sm:px-5 lg:px-8">
-          <Outlet />
-        </div>
-      </main>
-    </div>
+    <TrackFinanceProvider>
+      <div className="min-h-full bg-gradient-to-br from-zinc-100 via-white to-zinc-100 dark:from-black dark:via-zinc-950 dark:to-black">
+        <DigestReminder />
+        <Sidebar collapsed={sidebarCollapsed} onToggle={() => setSidebarCollapsed((p) => !p)} />
+        <main className={sidebarCollapsed ? "pl-20" : "pl-72"}>
+          <div className="mx-auto w-full max-w-none px-3 py-10 sm:px-5 lg:px-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
+    </TrackFinanceProvider>
   );
 }

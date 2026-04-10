@@ -11,8 +11,13 @@ import {
   FlaskConical,
   Gem,
   Landmark,
+  LayoutDashboard,
   ReceiptText,
+  Repeat,
   Settings,
+  Sparkles,
+  Target,
+  TrendingUp,
   WalletCards,
   Wallet,
 } from "lucide-react";
@@ -56,28 +61,58 @@ const investGroups = [
 
 const trackGroups = [
   {
+    to: "/track/overview",
+    label: "Overview",
+    hint: "Health score, cash-flow snapshot, and Track → Invest prompts.",
+    icon: LayoutDashboard,
+  },
+  {
     to: "/track/spending",
     label: "Spending",
-    hint: "Track monthly expenses and identify overspending patterns.",
+    hint: "Category breakdown, % of income, and behavior-style insights.",
     icon: WalletCards,
   },
   {
     to: "/track/budget",
     label: "Budget",
-    hint: "Plan monthly income, bills, savings, and discretionary spend.",
+    hint: "Budget vs actual bars and over-spend alerts.",
     icon: Calculator,
+  },
+  {
+    to: "/track/cash-flow",
+    label: "Cash flow",
+    hint: "Income, expenses, net savings trend.",
+    icon: TrendingUp,
+  },
+  {
+    to: "/track/subscriptions",
+    label: "Subscriptions",
+    hint: "Recurring charges and monthly total.",
+    icon: Repeat,
+  },
+  {
+    to: "/track/goals",
+    label: "Goals",
+    hint: "Emergency fund, vacation, down payment progress.",
+    icon: Target,
   },
   {
     to: "/track/mortgage",
     label: "Mortgage",
-    hint: "Understand housing payment mix and payoff strategies.",
+    hint: "P/I split, payoff, and extra principal impact.",
     icon: Landmark,
   },
   {
     to: "/track/taxes",
     label: "Taxes",
-    hint: "Organize tax planning, withholding, and deductible categories.",
+    hint: "Simple federal estimate — not tax advice.",
     icon: ReceiptText,
+  },
+  {
+    to: "/track/what-if",
+    label: "What-if",
+    hint: "If you invest freed cash monthly, see illustrative growth.",
+    icon: Sparkles,
   },
 ];
 
@@ -181,7 +216,7 @@ export function Sidebar({
               Invest
             </NavLink>
             <NavLink
-              to="/track/spending"
+              to="/track/overview"
               className={({ isActive }) =>
                 clsx(
                   "rounded-lg px-3 py-1.5 text-center text-xs font-semibold transition",

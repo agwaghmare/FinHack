@@ -236,8 +236,11 @@ export const api = {
     }),
   integrationStatus: () =>
     j<Record<string, boolean>>("/auth/integration-status"),
-  brokerOauthStartUrl: (broker: string, redirectUri: string, state = "") =>
-    `${base}/auth/broker-oauth/start?broker=${encodeURIComponent(broker)}&redirect_uri=${encodeURIComponent(redirectUri)}`,
+  brokerOauthStartUrl: (broker: string, redirectUri: string, state = "") => {
+    const q = new URLSearchParams({ broker, redirect_uri: redirectUri });
+    if (state) q.set("state", state);
+    return `${base}/auth/broker-oauth/start?${q.toString()}`;
+  },
   brokerOauthCallbackUrl: (broker: string) =>
     `${base}/auth/broker-oauth/callback?broker=${encodeURIComponent(broker)}`,
   brokerOauthConnections: () =>
