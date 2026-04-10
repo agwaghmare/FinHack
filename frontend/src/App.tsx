@@ -18,6 +18,7 @@ import { Welcome } from "./pages/Welcome";
 import { RealPortfolio } from "./pages/RealPortfolio";
 import { Onboarding } from "./pages/Onboarding";
 import { RequireOnboarding } from "./components/RequireOnboarding";
+import { Budget, Mortgage, Spending, Taxes } from "./pages/PersonalFinance";
 
 function WelcomeOrRedirect() {
   const clerkOn = useClerkEnabled();
@@ -37,7 +38,7 @@ function WelcomeOrRedirectAuthed() {
     );
   }
   if (isSignedIn) {
-    return <Navigate to="/pulse" replace />;
+    return <Navigate to="/invest/pulse" replace />;
   }
   return <Welcome />;
 }
@@ -53,21 +54,36 @@ export default function App() {
           <Route path="onboarding" element={<Onboarding />} />
           <Route element={<RequireOnboarding />}>
             <Route element={<Layout />}>
-              <Route path="pulse" element={<Market />} />
-              <Route path="portfolio" element={<RealPortfolio />} />
-              <Route path="paper-lab" element={<PaperTrading />} />
-              <Route path="macro-regime" element={<CommodityLens />} />
-              <Route path="commodities" element={<Navigate to="/macro-regime" replace />} />
-              <Route path="insights" element={<Insights />} />
-              <Route path="ai" element={<Navigate to="/insights" replace />} />
-              <Route path="learn" element={<Learn />} />
-              <Route path="alerts" element={<Alerts />} />
+              <Route path="invest/pulse" element={<Market />} />
+              <Route path="invest/portfolio" element={<RealPortfolio />} />
+              <Route path="invest/paper-lab" element={<PaperTrading />} />
+              <Route path="invest/macro-regime" element={<CommodityLens />} />
+              <Route path="invest/commodities" element={<Navigate to="/invest/macro-regime" replace />} />
+              <Route path="invest/insights" element={<Insights />} />
+              <Route path="invest/ai" element={<Navigate to="/invest/insights" replace />} />
+              <Route path="invest/learn" element={<Learn />} />
+              <Route path="invest/alerts" element={<Alerts />} />
+              <Route path="track/spending" element={<Spending />} />
+              <Route path="track/budget" element={<Budget />} />
+              <Route path="track/mortgage" element={<Mortgage />} />
+              <Route path="track/taxes" element={<Taxes />} />
               <Route path="settings" element={<Settings />} />
-              <Route path="market" element={<Navigate to="/pulse" replace />} />
-              <Route path="trade" element={<Navigate to="/paper-lab" replace />} />
-              <Route path="news" element={<Navigate to="/pulse" replace />} />
-              <Route path="dashboard" element={<Navigate to="/pulse" replace />} />
-              <Route path="*" element={<Navigate to="/pulse" replace />} />
+              <Route path="market" element={<Navigate to="/invest/pulse" replace />} />
+              <Route path="trade" element={<Navigate to="/invest/paper-lab" replace />} />
+              <Route path="news" element={<Navigate to="/invest/pulse" replace />} />
+              <Route path="dashboard" element={<Navigate to="/invest/pulse" replace />} />
+              <Route path="pulse" element={<Navigate to="/invest/pulse" replace />} />
+              <Route path="portfolio" element={<Navigate to="/invest/portfolio" replace />} />
+              <Route path="paper-lab" element={<Navigate to="/invest/paper-lab" replace />} />
+              <Route path="macro-regime" element={<Navigate to="/invest/macro-regime" replace />} />
+              <Route path="commodities" element={<Navigate to="/invest/macro-regime" replace />} />
+              <Route path="insights" element={<Navigate to="/invest/insights" replace />} />
+              <Route path="ai" element={<Navigate to="/invest/insights" replace />} />
+              <Route path="learn" element={<Navigate to="/invest/learn" replace />} />
+              <Route path="alerts" element={<Navigate to="/invest/alerts" replace />} />
+              <Route path="track" element={<Navigate to="/track/spending" replace />} />
+              <Route path="invest" element={<Navigate to="/invest/pulse" replace />} />
+              <Route path="*" element={<Navigate to="/invest/pulse" replace />} />
             </Route>
           </Route>
         </Route>
