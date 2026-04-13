@@ -56,10 +56,15 @@ def market_peer_suggest(
 
 @router.get("/movers")
 def market_movers(
-    count: int = Query(8, ge=1, le=25, description="Number of day gainers from Yahoo screener"),
+    count: int = Query(8, ge=1, le=25, description="Rows per side from Yahoo screener"),
+    side: str = Query(
+        "gainers",
+        description="gainers = day_gainers screener, losers = day_losers",
+        pattern="^(gainers|losers)$",
+    ),
 ):
-    """Top percentage gainers (US) — same list Yahoo shows under Day Gainers."""
-    return get_yahoo_day_movers(count)
+    """Top percentage gainers or losers (US) — Yahoo Finance day screeners."""
+    return get_yahoo_day_movers(count, side=side)
 
 
 @router.get("/earnings-week")

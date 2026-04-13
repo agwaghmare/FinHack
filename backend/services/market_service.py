@@ -529,21 +529,7 @@ def get_stock_fundamentals(symbol: str) -> dict[str, Any]:
     }
 
 
-def get_yahoo_day_movers(count: int = 8) -> dict[str, Any]:
-    """Yahoo Finance predefined screener `day_gainers` — real top % movers (US equities)."""
-    n = min(max(int(count), 1), 25)
-    try:
-        from yfinance import screen
-    except Exception as e:
-        logger.warning("yfinance screen import failed: %s", e)
-        return {"quotes": [], "count": 0, "error": "yfinance_unavailable", "source": "yahoo_day_gainers"}
-
-    try:
-        raw = screen("day_gainers", count=n)
-    except Exception as e:
-        logger.warning("Yahoo day_gainers screener failed: %s", e)
-        return {"quotes": [], "count": 0, "error": str(e), "source": "yahoo_day_gainers"}
-
+def _quotes_from_yahoo_screener_raw(raw: dict[str, Any], source_tag: str, n: int) -> list[dict[str, Any]]:
     quotes_out: list[dict[str, Any]] = []
     for q in (raw.get("quotes") or [])[:n]:
         if not isinstance(q, dict):
@@ -572,15 +558,47 @@ def get_yahoo_day_movers(count: int = 8) -> dict[str, Any]:
                 "volume": vol_i,
                 "long_name": q.get("longName") or q.get("shortName") or q.get("displayName"),
                 "why_today": _mover_why_today(sym),
-                "source": "yahoo_day_gainers",
+                "source": source_tag,
             }
         )
+    return quotes_out
 
+
+def get_yahoo_day_movers(count: int = 8, side: str = "gainers") -> dict[str, Any]:
+    """Yahoo Finance `day_gainers` / `day_losers` screeners — US equities by session % change."""
+    n = min(max(int(count), 1), 25)
+    side_l = (side or "gainers").lower().strip()
+    if side_l == "losers":
+        screener = "day_losers"
+        source_tag = "yahoo_day_losers"
+        default_title = "Day Losers"
+    else:
+        screener = "day_gainers"
+        source_tag = "yahoo_day_gainers"
+        default_title = "Day Gainers"
+
+    try:
+        from yfinance import screen
+    except Exception as e:
+        logger.warning("yfinance screen import failed: %s", e)
+        return {"quotes": [], "count": 0, "error": "yfinance_unavailable", "source": source_tag, "side": side_l}
+
+    try:
+        raw = screen(screener, count=n)
+    except Exception as e:
+        logger.warning("Yahoo %s screener failed: %s", screener, e)
+        return {"quotes": [], "count": 0, "error": str(e), "source": source_tag, "side": side_l}
+
+    if not isinstance(raw, dict):
+        return {"quotes": [], "count": 0, "error": "invalid_screener_response", "source": source_tag, "side": side_l}
+
+    quotes_out = _quotes_from_yahoo_screener_raw(raw, source_tag, n)
     return {
         "quotes": quotes_out,
         "count": len(quotes_out),
-        "source": "yahoo_day_gainers",
-        "screener_title": raw.get("title") or "Day Gainers",
+        "source": source_tag,
+        "side": side_l,
+        "screener_title": raw.get("title") or default_title,
     }
 
 

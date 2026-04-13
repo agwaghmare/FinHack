@@ -70,9 +70,11 @@ export const api = {
   marketOhlcChartUrl: (symbol: string, period = "1y", interval = "1d") =>
     `${base}/market/ohlc/chart.png?symbol=${encodeURIComponent(symbol)}&period=${encodeURIComponent(period)}&interval=${encodeURIComponent(interval)}`,
   marketMacro: () => j("/market/macro"),
-  /** Yahoo Finance day gainers (real movers). */
-  marketMovers: (count = 8) =>
-    j(`/market/movers?count=${encodeURIComponent(String(count))}`),
+  /** Yahoo Finance day gainers or losers (US equities). */
+  marketMovers: (count = 8, side: "gainers" | "losers" = "gainers") =>
+    j(
+      `/market/movers?count=${encodeURIComponent(String(count))}&side=${encodeURIComponent(side)}`,
+    ),
   /** Earnings dates in the next N days (watchlist universe). */
   marketEarningsWeek: (days = 7) =>
     j(`/market/earnings-week?days=${encodeURIComponent(String(days))}`),

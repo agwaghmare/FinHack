@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from "react";
-import { Loader2, Mic, PieChart, Search, Star, X } from "lucide-react";
+import { Loader2, Mic, PieChart, Search, Star, TrendingDown, TrendingUp, X } from "lucide-react";
 import { useUser } from "@clerk/clerk-react";
 import { addWatchlistSymbol, getWatchlist } from "../lib/watchlistStorage";
 import { Link } from "react-router-dom";
@@ -408,6 +408,10 @@ export function Market() {
   const [watchlistToast, setWatchlistToast] = useState<string | null>(null);
   const [narrativeBuckets, setNarrativeBuckets] = useState<NarrativeBuckets | null>(null);
   const [narrativeLoading, setNarrativeLoading] = useState(true);
+  const [dailyGainers, setDailyGainers] = useState<Quote[]>([]);
+  const [dailyLosers, setDailyLosers] = useState<Quote[]>([]);
+  const [dailyMoversLoading, setDailyMoversLoading] = useState(true);
+  const [dailyMoversNote, setDailyMoversNote] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -457,6 +461,42 @@ export function Market() {
           setLoading(false);
           setNarrativeLoading(false);
         }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      setDailyMoversLoading(true);
+      try {
+        const [gRaw, lRaw] = await Promise.all([
+          api.marketMovers(10, "gainers").catch(() => ({ quotes: [] as Quote[], error: "unavailable" })),
+          api.marketMovers(10, "losers").catch(() => ({ quotes: [] as Quote[], error: "unavailable" })),
+        ]);
+        if (cancelled) return;
+        const gq = (gRaw as { quotes?: Quote[] }).quotes ?? [];
+        const lq = (lRaw as { quotes?: Quote[] }).quotes ?? [];
+        setDailyGainers(gq);
+        setDailyLosers(lq);
+        const gErr = (gRaw as { error?: string }).error;
+        const lErr = (lRaw as { error?: string }).error;
+        setDailyMoversNote(
+          gq.length === 0 && lq.length === 0 && (gErr || lErr)
+            ? "Movers are unavailable right now (data limits or screener access)."
+            : null,
+        );
+      } catch {
+        if (!cancelled) {
+          setDailyGainers([]);
+          setDailyLosers([]);
+          setDailyMoversNote("Could not load daily movers.");
+        }
+      } finally {
+        if (!cancelled) setDailyMoversLoading(false);
       }
     })();
     return () => {
@@ -964,6 +1004,144 @@ export function Market() {
             </ul>
           </div>
         </div>
+      </section>
+
+      <section className="glass rounded-2xl p-6" aria-labelledby="daily-movers-heading">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 id="daily-movers-heading" className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
+              Daily movers
+            </h2>
+            <p className="mt-1 max-w-2xl text-xs text-zinc-500">
+              US equities from Yahoo Finance day gainers and losers (session % change, often delayed). “Why” lines are
+              pulled from recent ticker headlines when available. Tap a symbol for chart and fundamentals — research
+              context only, not a recommendation to trade.
+            </p>
+          </div>
+        </div>
+        {dailyMoversLoading ? (
+          <p className="mt-4 flex items-center gap-2 text-sm text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" /> Loading movers…
+          </p>
+        ) : (
+          <>
+            {dailyMoversNote ? (
+              <p className="mt-3 text-xs text-amber-500/90">{dailyMoversNote}</p>
+            ) : null}
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4">
+                <div className="flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-emerald-500/90" aria-hidden />
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-500/90">Top gainers</h3>
+                </div>
+                <ul className="mt-3 space-y-2">
+                  {dailyGainers.length === 0 ? (
+                    <li className="text-xs text-zinc-500">No gainers loaded.</li>
+                  ) : (
+                    dailyGainers.map((q) => {
+                      const sym = (q.symbol ?? "").toUpperCase();
+                      const ch = Number.parseFloat(String(q.change_percent ?? "0")) || 0;
+                      const name = q.long_name ? String(q.long_name) : null;
+                      const why = q.why_today?.trim() || null;
+                      return (
+                        <li key={`gainer-${sym}`}>
+                          <button
+                            type="button"
+                            className="flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-2 text-left transition hover:border-zinc-700/80 hover:bg-zinc-900/50"
+                            onClick={() => {
+                              setStockModalSymbol(sym);
+                              setStockLookupOpen(true);
+                              void applyDefaultPeersForSymbol(sym);
+                            }}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-zinc-100">{sym}</span>
+                              {name ? (
+                                <p className="truncate text-[11px] text-zinc-500">{name}</p>
+                              ) : null}
+                              {why ? (
+                                <p className="mt-1 text-[11px] leading-snug text-zinc-400 line-clamp-3">
+                                  <span className="font-medium text-zinc-500">Why: </span>
+                                  {why}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              {q.price != null && typeof q.price === "number" ? (
+                                <p className="text-xs tabular-nums text-zinc-400">
+                                  ${q.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                </p>
+                              ) : null}
+                              <p className="text-xs font-semibold tabular-nums text-emerald-400">
+                                {ch >= 0 ? "+" : ""}
+                                {q.change_percent ?? "—"}%
+                              </p>
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </div>
+              <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4">
+                <div className="flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-rose-500/90" aria-hidden />
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-rose-500/90">Top losers</h3>
+                </div>
+                <ul className="mt-3 space-y-2">
+                  {dailyLosers.length === 0 ? (
+                    <li className="text-xs text-zinc-500">No losers loaded.</li>
+                  ) : (
+                    dailyLosers.map((q) => {
+                      const sym = (q.symbol ?? "").toUpperCase();
+                      const ch = Number.parseFloat(String(q.change_percent ?? "0")) || 0;
+                      const name = q.long_name ? String(q.long_name) : null;
+                      const why = q.why_today?.trim() || null;
+                      return (
+                        <li key={`loser-${sym}`}>
+                          <button
+                            type="button"
+                            className="flex w-full items-start justify-between gap-2 rounded-lg border border-transparent px-2 py-2 text-left transition hover:border-zinc-700/80 hover:bg-zinc-900/50"
+                            onClick={() => {
+                              setStockModalSymbol(sym);
+                              setStockLookupOpen(true);
+                              void applyDefaultPeersForSymbol(sym);
+                            }}
+                          >
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-zinc-100">{sym}</span>
+                              {name ? (
+                                <p className="truncate text-[11px] text-zinc-500">{name}</p>
+                              ) : null}
+                              {why ? (
+                                <p className="mt-1 text-[11px] leading-snug text-zinc-400 line-clamp-3">
+                                  <span className="font-medium text-zinc-500">Why: </span>
+                                  {why}
+                                </p>
+                              ) : null}
+                            </div>
+                            <div className="shrink-0 text-right">
+                              {q.price != null && typeof q.price === "number" ? (
+                                <p className="text-xs tabular-nums text-zinc-400">
+                                  ${q.price.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                                </p>
+                              ) : null}
+                              <p className="text-xs font-semibold tabular-nums text-rose-400">
+                                {ch >= 0 ? "+" : ""}
+                                {q.change_percent ?? "—"}%
+                              </p>
+                            </div>
+                          </button>
+                        </li>
+                      );
+                    })
+                  )}
+                </ul>
+              </div>
+            </div>
+          </>
+        )}
       </section>
 
       <section className="grid gap-4 xl:grid-cols-2 xl:items-start">
