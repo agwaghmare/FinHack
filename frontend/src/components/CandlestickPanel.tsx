@@ -53,7 +53,7 @@ export function CandlestickPanel({
         )}
         {err && <span className="text-xs text-amber-600 dark:text-amber-500">{err}</span>}
       </div>
-      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-zinc-800 dark:bg-zinc-950/50">
+      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50 dark:border-white/10">
         <img
           src={src}
           alt={`${sym} OHLC candlestick chart`}

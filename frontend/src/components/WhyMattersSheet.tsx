@@ -52,7 +52,7 @@ export function WhyMattersButton({ context, label = "Why this matters", classNam
         title="Plain-English explanation"
         className={
           className ??
-          "inline-flex items-center gap-1 rounded-full border border-zinc-600/80 bg-zinc-900/60 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-300 hover:border-zinc-400 hover:text-white"
+          "glass-chip inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600 hover:bg-white/50 dark:text-zinc-300 dark:hover:bg-white/15"
         }
       >
         <HelpCircle className="h-3 w-3" />
@@ -67,17 +67,17 @@ export function WhyMattersButton({ context, label = "Why this matters", classNam
         >
           <button
             type="button"
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="glass-overlay absolute inset-0"
             aria-label="Close"
             onClick={() => setOpen(false)}
           />
-          <div className="relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-zinc-700 bg-zinc-950 p-6 shadow-2xl sm:rounded-2xl">
+          <div className="glass-modal relative z-10 max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-t-2xl p-6 sm:rounded-2xl">
             <div className="flex items-start justify-between gap-3">
-              <h3 className="text-sm font-semibold text-white">Why this matters</h3>
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-white">Why this matters</h3>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-lg p-1 text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200"
+                className="rounded-lg p-1 text-zinc-500 hover:bg-white/40 hover:text-zinc-800 dark:hover:bg-white/10 dark:hover:text-zinc-200"
               >
                 <X className="h-4 w-4" />
               </button>

@@ -10,10 +10,10 @@ python -m venv .venv
 .venv\Scripts\activate
 pip install -r requirements.txt
 # Configure API keys in `.env` (see `backend/utils/env_keys.py` for supported names)
-uvicorn app:app --reload --host 127.0.0.1 --port 8000
+uvicorn app:app --reload --host 127.0.0.1 --port 8001
 ```
 
-Docs: [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
+Docs: [http://127.0.0.1:8001/docs](http://127.0.0.1:8001/docs)
 
 ### Layout
 

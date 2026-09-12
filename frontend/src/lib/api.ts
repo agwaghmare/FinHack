@@ -4,7 +4,7 @@ function normalizeApiBase(raw: string | undefined): string {
   if (!t) {
     // Empty VITE_API_URL + Vite proxy (see vite.config.ts) → same-origin in dev.
     if (import.meta.env.DEV) return "";
-    return "http://127.0.0.1:8000";
+    return "http://127.0.0.1:8001";
   }
   return t.replace(/\/+$/, "");
 }
@@ -191,6 +191,23 @@ export const api = {
   tradeLeaderboard: () => j("/trade/leaderboard"),
   tradeAiFeedback: (userId: string) =>
     j(`/trade/ai-feedback/${encodeURIComponent(userId)}`),
+  /** Daily portfolio VaR (historical + parametric). */
+  tradingVar: (userId: string, lookback = "1y") =>
+    j(
+      `/trading/var/${encodeURIComponent(userId)}?lookback=${encodeURIComponent(lookback)}`,
+    ),
+  tradingStrategies: () => j("/trading/strategies"),
+  tradingBacktest: (body: {
+    symbol: string;
+    strategy: string;
+    period?: string;
+    initial_cash?: number;
+    params?: Record<string, number>;
+  }) =>
+    j("/trading/backtest", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   learnModules: () => j("/learn/modules"),
   learnModule: (id: string) =>
     j(`/learn/module/${encodeURIComponent(id)}`),

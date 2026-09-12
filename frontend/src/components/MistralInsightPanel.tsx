@@ -135,7 +135,7 @@ const variantStyles: Record<
     badge:
       "border-violet-500/30 bg-violet-500/10 text-violet-800 dark:border-violet-400/25 dark:bg-violet-500/15 dark:text-violet-200",
     contentWell:
-      "border-violet-500/15 bg-white/70 shadow-inner dark:border-violet-500/10 dark:bg-zinc-950/50",
+      "glass-inset border-violet-500/20 shadow-inner",
   },
   sky: {
     shell:
@@ -146,7 +146,7 @@ const variantStyles: Record<
     badge:
       "border-sky-500/30 bg-sky-500/10 text-sky-900 dark:border-sky-400/25 dark:bg-sky-500/15 dark:text-sky-100",
     contentWell:
-      "border-sky-500/15 bg-white/70 shadow-inner dark:border-sky-500/10 dark:bg-zinc-950/50",
+      "glass-inset border-sky-500/20 shadow-inner",
   },
 };
 

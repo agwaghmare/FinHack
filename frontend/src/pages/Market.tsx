@@ -108,7 +108,7 @@ function NarrativeLane({
   article: NarrativeArticle | null;
 }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+    <div className="rounded-xl glass-inset p-4">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-emerald-500/90">{title}</p>
       <p className="mt-0.5 text-[11px] text-zinc-500">{subtitle}</p>
       {article ? (
@@ -117,16 +117,16 @@ function NarrativeLane({
             href={article.url}
             target="_blank"
             rel="noreferrer"
-            className="text-sm font-semibold leading-snug text-zinc-100 underline-offset-2 hover:text-emerald-300 hover:underline"
+            className="text-sm font-semibold leading-snug text-zinc-900 underline-offset-2 hover:text-emerald-600 hover:underline dark:text-zinc-100 dark:hover:text-emerald-300"
           >
             {article.title}
           </a>
-          <p className="text-xs leading-relaxed text-zinc-400 line-clamp-6">{article.summary}</p>
+          <p className="text-xs leading-relaxed text-zinc-600 line-clamp-6 dark:text-zinc-400">{article.summary}</p>
           <div className="flex flex-wrap items-center gap-2 text-[10px] text-zinc-500">
             <span>{article.source}</span>
             {article.time_published ? <span>· {article.time_published}</span> : null}
             {article.sentiment_label ? (
-              <span className="rounded-full bg-zinc-800 px-2 py-0.5 text-zinc-400">{article.sentiment_label}</span>
+              <span className="rounded-full bg-zinc-200 px-2 py-0.5 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">{article.sentiment_label}</span>
             ) : null}
           </div>
         </div>
@@ -254,7 +254,7 @@ function CapLeaderCard({
             onError={() => setLogo(null)}
           />
         ) : (
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-700 bg-zinc-800 text-xs font-bold text-zinc-400">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-zinc-300 bg-zinc-100 text-xs font-bold text-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-400">
             {(q.symbol ?? "?").slice(0, 2)}
           </div>
         )}
@@ -262,7 +262,7 @@ function CapLeaderCard({
           <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
             {q.kind ?? "equity"}
           </p>
-          <p className="truncate text-base font-semibold text-zinc-100">{q.symbol ?? "—"}</p>
+          <p className="truncate text-base font-semibold text-zinc-900 dark:text-zinc-100">{q.symbol ?? "—"}</p>
           {name ? <p className="truncate text-[10px] text-zinc-500">{name}</p> : null}
         </div>
         <div onClick={(e) => e.stopPropagation()} className="shrink-0">
@@ -875,7 +875,7 @@ export function Market() {
         </label>
         <input
           id="pulse-stock-search"
-          className="min-w-[10rem] flex-1 rounded-xl border border-zinc-700 bg-zinc-900/80 px-3 py-2 text-sm uppercase text-white sm:max-w-xs"
+          className="glass-input min-w-[10rem] flex-1 rounded-xl px-3 py-2 text-sm uppercase text-zinc-900 dark:text-white sm:max-w-xs"
           value={stockLookupInput}
           onChange={(e) => setStockLookupInput(e.target.value)}
           placeholder="e.g. AAPL"
@@ -884,7 +884,7 @@ export function Market() {
         />
         <button
           type="submit"
-          className="inline-flex items-center gap-2 rounded-full bg-zinc-800 px-4 py-2 text-xs font-semibold text-zinc-100 ring-1 ring-zinc-600 hover:bg-zinc-700"
+          className="inline-flex items-center gap-2 rounded-full bg-zinc-900 px-4 py-2 text-xs font-semibold text-white ring-1 ring-zinc-700 hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:ring-zinc-300 dark:hover:bg-white"
         >
           <Search className="h-3.5 w-3.5" />
           Open
@@ -892,7 +892,7 @@ export function Market() {
         <button
           type="button"
           onClick={addTickerToWatchlist}
-          className="inline-flex items-center gap-2 rounded-full border border-amber-600/50 bg-amber-950/30 px-4 py-2 text-xs font-semibold text-amber-100 hover:bg-amber-950/50"
+          className="inline-flex items-center gap-2 rounded-full border border-amber-500/50 bg-amber-500/10 px-4 py-2 text-xs font-semibold text-amber-800 hover:bg-amber-500/20 dark:text-amber-100"
         >
           <Star className="h-3.5 w-3.5" />
           Watchlist
@@ -917,13 +917,13 @@ export function Market() {
             Live tape & sentiment
           </h1>
           <p className="mt-2 max-w-2xl text-sm text-zinc-500">
-            Part of our <span className="text-zinc-400">research &amp; education</span> story: live tape for stocks
+            Part of our <span className="text-zinc-600 dark:text-zinc-400">research &amp; education</span> story: live tape for stocks
             and crypto, narrative summaries by theme, and CPI / Fed / GDP on{" "}
-            <Link className="text-zinc-300 underline underline-offset-2" to="/macro-regime">
+            <Link className="text-emerald-700 underline underline-offset-2 dark:text-emerald-300" to="/invest/macro-regime">
               Macro Regime
             </Link>
             ; concepts &amp; tutor in{" "}
-            <Link className="text-zinc-300 underline underline-offset-2" to="/learn">
+            <Link className="text-emerald-700 underline underline-offset-2 dark:text-emerald-300" to="/invest/learn">
               Learn Hub
             </Link>
             .
@@ -946,7 +946,7 @@ export function Market() {
 
       <section className="glass rounded-2xl p-6">
         <div className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-5 lg:col-span-2">
+          <div className="rounded-2xl glass-inset p-5 lg:col-span-2">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">
               Market open + close podcast rectangle
             </h2>
@@ -992,7 +992,7 @@ export function Market() {
               </div>
             </div>
           </div>
-          <div className="rounded-2xl border border-zinc-800 bg-zinc-950/40 p-5">
+          <div className="rounded-2xl glass-inset p-5">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">What you'll hear (daily)</h2>
             <ul className="mt-3 space-y-2 text-xs leading-relaxed text-zinc-400">
               <li><span className="font-medium text-zinc-300">Macro:</span> broad macro headlines</li>
@@ -1029,7 +1029,7 @@ export function Market() {
               <p className="mt-3 text-xs text-amber-500/90">{dailyMoversNote}</p>
             ) : null}
             <div className="mt-4 grid gap-4 md:grid-cols-2">
-              <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4">
+              <div className="rounded-xl glass-inset p-4">
                 <div className="flex items-center gap-2">
                   <TrendingUp className="h-4 w-4 text-emerald-500/90" aria-hidden />
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-emerald-500/90">Top gainers</h3>
@@ -1084,7 +1084,7 @@ export function Market() {
                   )}
                 </ul>
               </div>
-              <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4">
+              <div className="rounded-xl glass-inset p-4">
                 <div className="flex items-center gap-2">
                   <TrendingDown className="h-4 w-4 text-rose-500/90" aria-hidden />
                   <h3 className="text-xs font-semibold uppercase tracking-wide text-rose-500/90">Top losers</h3>
@@ -1154,7 +1154,7 @@ export function Market() {
               </h2>
             </div>
             <Link
-              to="/portfolio"
+              to="/invest/portfolio"
               className="text-xs font-semibold text-amber-500/90 underline-offset-2 hover:underline"
             >
               Edit holdings
@@ -1170,7 +1170,7 @@ export function Market() {
           ) : !user ? (
             <p className="mt-4 text-sm text-zinc-400">
               Sign in to see performance for positions saved under{" "}
-              <Link className="text-amber-500/90 underline" to="/portfolio">
+              <Link className="text-amber-500/90 underline" to="/invest/portfolio">
                 My portfolio
               </Link>
               .
@@ -1196,7 +1196,7 @@ export function Market() {
                   return (
                     <div
                       key={k}
-                      className="rounded-xl border border-zinc-800 bg-zinc-950/50 px-3 py-3 text-center"
+                      className="rounded-xl glass-inset px-3 py-3 text-center"
                     >
                       <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">
                         {label}
@@ -1213,7 +1213,7 @@ export function Market() {
                 })}
               </div>
               {portfolioCurve?.has_positions && (portfolioCurve.points?.length ?? 0) > 1 ? (
-                <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+                <div className="mt-5 rounded-xl glass-inset p-4">
                   <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
                     Equity curve (capital growth)
                   </p>
@@ -1259,7 +1259,7 @@ export function Market() {
                       </p>
                     </div>
                     <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                      <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+                      <div className="rounded-md glass-inset p-2">
                         <p className="text-[10px] uppercase tracking-wide text-zinc-500">Start capital</p>
                         <p className="text-xs font-semibold text-zinc-200">
                           $
@@ -1268,7 +1268,7 @@ export function Market() {
                           })}
                         </p>
                       </div>
-                      <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+                      <div className="rounded-md glass-inset p-2">
                         <p className="text-[10px] uppercase tracking-wide text-zinc-500">Growth</p>
                         <p
                           className={`text-xs font-semibold ${
@@ -1287,7 +1287,7 @@ export function Market() {
                           })()}
                         </p>
                       </div>
-                      <div className="rounded-md border border-zinc-800 bg-zinc-950/50 p-2">
+                      <div className="rounded-md glass-inset p-2">
                         <p className="text-[10px] uppercase tracking-wide text-zinc-500">Current capital</p>
                         <p className="text-xs font-semibold text-zinc-200">
                           $
@@ -1301,7 +1301,7 @@ export function Market() {
                 </div>
               ) : null}
               {topPerformers?.has_positions && (topPerformers.items?.length ?? 0) > 0 ? (
-                <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-950/40 p-4">
+                <div className="mt-5 rounded-xl glass-inset p-4">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
                     Top holdings so far ({topPerformers.period_label ?? "Year to date"})
                   </p>
@@ -1332,7 +1332,7 @@ export function Market() {
                   </ul>
                 </div>
               ) : topPerformers?.has_positions && topPerformers.hint ? (
-                <p className="mt-5 rounded-xl border border-zinc-800/60 bg-zinc-950/30 px-4 py-3 text-xs text-zinc-500">
+                <p className="mt-5 rounded-xl glass-inset px-4 py-3 text-xs text-zinc-500">
                   {topPerformers.hint}
                 </p>
               ) : null}
@@ -1455,7 +1455,7 @@ export function Market() {
             ))}
           </div>
           {expandedLeader ? (
-            <div className="mt-4 rounded-2xl border border-zinc-800 bg-zinc-950/40 p-4">
+            <div className="mt-4 rounded-2xl glass-inset p-4">
               <StockInfoPanel symbol={expandedLeader} showChart chartPeriod="1y" />
             </div>
           ) : null}
@@ -1497,7 +1497,7 @@ export function Market() {
                 subtitle="Policy, conflict, sanctions, defense — market-relevant headlines."
                 article={narrativeBuckets.geopolitical}
               />
-              <div className="rounded-xl border border-zinc-800 bg-zinc-950/50 p-4">
+              <div className="rounded-xl glass-inset p-4">
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500/90">Two names</p>
                 <p className="mt-0.5 text-[11px] text-zinc-500">
                   Single-stock catalysts (earnings, guidance, major tech names).
@@ -1509,7 +1509,7 @@ export function Market() {
                     </p>
                   ) : (
                     narrativeBuckets.two_names.slice(0, 2).map((a, i) => (
-                      <div key={`${a.url}-${i}`} className="rounded-lg border border-zinc-800/80 bg-zinc-950/40 p-3">
+                      <div key={`${a.url}-${i}`} className="rounded-lg glass-inset p-3">
                         <a
                           href={a.url}
                           target="_blank"
@@ -1604,24 +1604,24 @@ export function Market() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" role="dialog" aria-modal="true">
           <button
             type="button"
-            className="absolute inset-0 bg-black/60"
+            className="glass-overlay absolute inset-0"
             aria-label="Close"
             onClick={() => setStockLookupOpen(false)}
           />
-          <div className="relative z-10 max-h-[min(90vh,900px)] w-full max-w-5xl overflow-y-auto rounded-2xl border border-zinc-700 bg-zinc-950 p-6 shadow-2xl">
+          <div className="relative z-10 max-h-[min(90vh,900px)] w-full max-w-5xl overflow-y-auto glass-modal rounded-2xl p-6">
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-zinc-100">{stockModalSymbol}</h2>
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">{stockModalSymbol}</h2>
               <button
                 type="button"
                 onClick={() => setStockLookupOpen(false)}
-                className="rounded-lg p-2 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+                className="rounded-lg p-2 text-zinc-500 hover:bg-white/40 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-100"
                 aria-label="Close"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
             <StockInfoPanel symbol={stockModalSymbol} showChart chartPeriod="1y" />
-            <div className="mt-5 rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+            <div className="mt-5 glass-inset rounded-xl p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold uppercase tracking-wide text-zinc-400">
                   Sector + performance comparison
@@ -1635,7 +1635,7 @@ export function Market() {
               ) : null}
               <div className="mt-3 flex flex-wrap gap-2">
                 <input
-                  className="min-w-[14rem] flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-xs uppercase text-zinc-100"
+                  className="glass-input min-w-[14rem] flex-1 rounded-lg px-3 py-2 text-xs uppercase text-zinc-900 dark:text-zinc-100"
                   value={compareInput}
                   onChange={(e) => setCompareInput(e.target.value)}
                   placeholder="e.g. NVDA,AMD,INTC"
@@ -1669,7 +1669,7 @@ export function Market() {
                         : "—";
                     const analyst = formatAnalystLabel(r.recommendationMean, r.recommendationKey);
                     return (
-                      <div key={r.symbol} className="rounded-lg border border-zinc-800 bg-zinc-950/60 p-3">
+                      <div key={r.symbol} className="rounded-lg glass-inset p-3">
                         <p className="text-base font-semibold text-zinc-100">{r.symbol}</p>
                         <p className="mt-0.5 text-[11px] text-zinc-500 line-clamp-2">{r.longName ?? "—"}</p>
                         <p className="mt-1 text-xs text-zinc-400">

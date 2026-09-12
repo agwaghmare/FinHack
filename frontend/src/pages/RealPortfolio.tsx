@@ -320,7 +320,11 @@ export function RealPortfolio() {
               <Link className="text-emerald-600 underline underline-offset-2 dark:text-emerald-400" to="/learn">
                 Learn Hub
               </Link>{" "}
-              for financial literacy.
+              for financial literacy. Check{" "}
+              <Link className="text-amber-700 underline underline-offset-2 dark:text-amber-400" to="/invest/trading">
+                Trading Lab
+              </Link>{" "}
+              for daily VaR and strategy backtests.
             </p>
           </div>
         </div>
@@ -407,7 +411,7 @@ export function RealPortfolio() {
       <div className="grid gap-6 lg:grid-cols-5">
         <form
           onSubmit={addHolding}
-          className="glass rounded-2xl border border-zinc-200/70 bg-white/80 p-5 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60 lg:col-span-2"
+          className="glass rounded-2xl p-5 lg:col-span-2"
         >
           <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Add holding</h2>
           <p className="mt-1 text-xs text-zinc-500">
@@ -494,7 +498,7 @@ export function RealPortfolio() {
           </button>
         </form>
 
-        <div className="glass rounded-2xl border border-zinc-200/70 bg-white/80 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60 lg:col-span-3">
+        <div className="glass rounded-2xl lg:col-span-3">
           <div className="border-b border-zinc-200/60 px-5 py-4 dark:border-zinc-800/80">
             <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Holdings</h2>
           </div>
@@ -567,7 +571,7 @@ export function RealPortfolio() {
         </div>
       </div>
 
-      <section className="glass rounded-2xl border border-zinc-200/70 bg-white/80 p-6 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60">
+      <section className="glass rounded-2xl p-6">
         <h2 className="text-sm font-semibold text-zinc-900 dark:text-white">Connect your broker</h2>
         <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
           Connectors show live availability from backend configuration. Alpaca works via API keys;
@@ -680,7 +684,7 @@ function Kpi({
   hint?: string;
 }) {
   return (
-    <div className="glass rounded-2xl border border-zinc-200/70 bg-white/80 p-4 shadow-sm dark:border-zinc-800/90 dark:bg-zinc-950/60">
+    <div className="glass rounded-2xl p-4">
       <p className="text-[11px] font-medium uppercase tracking-wide text-zinc-500">{label}</p>
       <p className="mt-2 text-xl font-semibold tabular-nums text-zinc-900 dark:text-white">
         {value}

@@ -16,6 +16,7 @@ import { Learn } from "./pages/Learn";
 import { CommodityLens } from "./pages/CommodityLens";
 import { Welcome } from "./pages/Welcome";
 import { RealPortfolio } from "./pages/RealPortfolio";
+import { Trading } from "./pages/Trading";
 import { Onboarding } from "./pages/Onboarding";
 import { RequireOnboarding } from "./components/RequireOnboarding";
 import {
@@ -42,7 +43,7 @@ function WelcomeOrRedirectAuthed() {
   const { isLoaded, isSignedIn } = useAuth();
   if (!isLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-sm text-zinc-400">
+      <div className="flex min-h-screen items-center justify-center text-sm text-zinc-500">
         Loading…
       </div>
     );
@@ -67,6 +68,7 @@ export default function App() {
               <Route path="invest/pulse" element={<Market />} />
               <Route path="invest/portfolio" element={<RealPortfolio />} />
               <Route path="invest/paper-lab" element={<PaperTrading />} />
+              <Route path="invest/trading" element={<Trading />} />
               <Route path="invest/macro-regime" element={<CommodityLens />} />
               <Route path="invest/commodities" element={<Navigate to="/invest/macro-regime" replace />} />
               <Route path="invest/insights" element={<Insights />} />
@@ -84,7 +86,8 @@ export default function App() {
               <Route path="track/what-if" element={<TrackWhatIf />} />
               <Route path="settings" element={<Settings />} />
               <Route path="market" element={<Navigate to="/invest/pulse" replace />} />
-              <Route path="trade" element={<Navigate to="/invest/paper-lab" replace />} />
+              <Route path="trade" element={<Navigate to="/invest/trading" replace />} />
+              <Route path="trading" element={<Navigate to="/invest/trading" replace />} />
               <Route path="news" element={<Navigate to="/invest/pulse" replace />} />
               <Route path="dashboard" element={<Navigate to="/invest/pulse" replace />} />
               <Route path="pulse" element={<Navigate to="/invest/pulse" replace />} />

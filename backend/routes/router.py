@@ -9,6 +9,7 @@ from backend.routes.market import router as market_router
 from backend.routes.news import router as news_router
 from backend.routes.portfolio import router as portfolio_router
 from backend.routes.trade import router as trade_router
+from backend.routes.trading import router as trading_router
 from backend.routes.voice import router as voice_router
 
 api_router = APIRouter()
@@ -22,4 +23,5 @@ api_router.include_router(alerts_router, prefix="/alerts", tags=["alerts"])
 api_router.include_router(voice_router, prefix="/voice", tags=["voice"])
 api_router.include_router(auth_router, prefix="/auth", tags=["auth"])
 api_router.include_router(trade_router, prefix="/trade", tags=["trade"])
+api_router.include_router(trading_router, prefix="/trading", tags=["trading"])
 api_router.include_router(learn_router, prefix="/learn", tags=["learn"])

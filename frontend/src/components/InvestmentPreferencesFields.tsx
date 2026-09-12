@@ -38,7 +38,7 @@ export function InvestmentPreferencesFields({
                 className={`flex cursor-pointer flex-col rounded-xl border p-4 transition ${
                   checked
                     ? "border-amber-500/60 bg-amber-500/5 ring-1 ring-amber-500/30"
-                    : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-950/40 dark:hover:border-zinc-600"
+                    : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-white/10 dark:hover:border-zinc-600"
                 } ${disabled ? "pointer-events-none opacity-60" : ""}`}
               >
                 <div className="flex items-start gap-3">
@@ -74,7 +74,7 @@ export function InvestmentPreferencesFields({
               className={`flex cursor-pointer items-start gap-3 rounded-xl border px-4 py-3 text-sm transition ${
                 styleSet.has(s.id)
                   ? "border-amber-500/50 bg-amber-500/5"
-                  : "border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950/40"
+                  : "border-zinc-200 bg-white dark:border-white/10"
               } ${disabled ? "pointer-events-none opacity-60" : ""}`}
             >
               <input

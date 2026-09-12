@@ -12,7 +12,7 @@ export function RequireOnboarding() {
 
   if (!isLoaded) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-zinc-950 text-zinc-400">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-zinc-500">
         <Loader2 className="h-8 w-8 animate-spin" />
         <p className="text-sm">Loading your profile…</p>
       </div>

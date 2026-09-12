@@ -48,6 +48,16 @@ const investopediaLinks: Record<string, { label: string; url: string }[]> = {
   "paper-trading": [
     { label: "Paper trading", url: "https://www.investopedia.com/terms/p/papertrade.asp" },
   ],
+  "trading-mechanics": [
+    { label: "Order types", url: "https://www.investopedia.com/ask/answers/100314/whats-difference-between-market-order-and-limit-order.asp" },
+    { label: "Bid-ask spread", url: "https://www.investopedia.com/terms/b/bid-askspread.asp" },
+    { label: "Slippage", url: "https://www.investopedia.com/terms/s/slippage.asp" },
+  ],
+  "strategy-design": [
+    { label: "Backtesting", url: "https://www.investopedia.com/terms/b/backtesting.asp" },
+    { label: "Value at Risk (VaR)", url: "https://www.investopedia.com/terms/v/var.asp" },
+    { label: "Drawdown", url: "https://www.investopedia.com/terms/d/drawdown.asp" },
+  ],
 };
 
 type PeerReply = {
@@ -264,7 +274,7 @@ function PeerCircleSection({ userId }: { userId: string }) {
         </p>
       ) : null}
 
-      <div className="mt-5 rounded-xl border border-dashed border-zinc-300 bg-white/50 p-4 dark:border-zinc-700 dark:bg-zinc-950/40">
+      <div className="mt-5 glass-inset rounded-xl border-dashed p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Start a thread</p>
         <label className="sr-only" htmlFor="peer-title">
           Title

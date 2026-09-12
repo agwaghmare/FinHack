@@ -90,7 +90,7 @@ export function CrossAssetStressLab({ variant = "page", model, anchorId }: Props
             } ${
               lockMode === m.id
                 ? "border-amber-500/60 bg-amber-500/15 text-amber-200"
-                : "border-zinc-600 bg-zinc-950/50 text-zinc-400 hover:border-zinc-500 hover:text-zinc-200"
+                : "glass-inset text-zinc-500 hover:bg-white/40 hover:text-zinc-800 dark:text-zinc-400 dark:hover:bg-white/10 dark:hover:text-zinc-200"
             }`}
           >
             {m.label}
@@ -146,7 +146,7 @@ export function CrossAssetStressLab({ variant = "page", model, anchorId }: Props
       </div>
 
       <dl className={`mt-4 grid gap-2 text-sm ${compact ? "grid-cols-1" : "mt-6 grid-cols-2 lg:grid-cols-3"}`}>
-        <div className={`rounded-xl border border-zinc-700/80 bg-zinc-950/50 ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
+        <div className={`rounded-xl glass-inset ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
           <dt className={`font-medium uppercase tracking-wide text-zinc-500 ${compact ? "text-[9px]" : "text-[10px]"}`}>
             Stressed WTI
           </dt>
@@ -154,7 +154,7 @@ export function CrossAssetStressLab({ variant = "page", model, anchorId }: Props
             {loading ? "…" : `$${scenario.stressedOil.toFixed(2)}`}
           </dd>
         </div>
-        <div className={`rounded-xl border border-zinc-700/80 bg-zinc-950/50 ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
+        <div className={`rounded-xl glass-inset ${compact ? "px-2 py-1.5" : "px-3 py-2"}`}>
           <dt className={`font-medium uppercase tracking-wide text-zinc-500 ${compact ? "text-[9px]" : "text-[10px]"}`}>
             Energy-heavy proxy (100)
           </dt>
@@ -162,7 +162,7 @@ export function CrossAssetStressLab({ variant = "page", model, anchorId }: Props
             {scenario.portfolioProxy.toFixed(1)}
           </dd>
         </div>
-        <div className={`rounded-xl border border-zinc-700/80 bg-zinc-950/50 ${compact ? "px-2 py-1.5" : "px-3 py-2 sm:col-span-2 lg:col-span-1"}`}>
+        <div className={`rounded-xl glass-inset ${compact ? "px-2 py-1.5" : "px-3 py-2 sm:col-span-2 lg:col-span-1"}`}>
           <dt className={`font-medium uppercase tracking-wide text-zinc-500 ${compact ? "text-[9px]" : "text-[10px]"}`}>
             Ag/USD-sensitive proxy (100)
           </dt>
@@ -212,7 +212,7 @@ function SliderRow({
     accent === "amber" ? "accent-amber-600" : accent === "emerald" ? "accent-emerald-600" : "accent-zinc-400";
   return (
     <label
-      className={`flex flex-col rounded-xl border border-zinc-800 bg-zinc-950/40 ${
+      className={`flex flex-col rounded-xl glass-inset ${
         compact ? "gap-1 p-2" : "gap-2 p-3"
       } ${disabled ? "opacity-50" : ""}`}
     >

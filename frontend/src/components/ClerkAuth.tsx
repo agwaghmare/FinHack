@@ -46,7 +46,7 @@ export function ClerkAuthRoot({ children }: { children: ReactNode }) {
 
   if (pk === null) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-zinc-950 text-zinc-400">
+      <div className="flex min-h-screen items-center justify-center text-zinc-500">
         Loading…
       </div>
     );
@@ -73,7 +73,7 @@ export function ClerkAuthRoot({ children }: { children: ReactNode }) {
       <ClerkProvider
         publishableKey={pk}
         afterSignOutUrl="/"
-        signInFallbackRedirectUrl="/pulse"
+        signInFallbackRedirectUrl="/invest/pulse"
         signUpFallbackRedirectUrl="/onboarding"
       >
         <TokenBridge />
@@ -85,22 +85,27 @@ export function ClerkAuthRoot({ children }: { children: ReactNode }) {
 
 export function ClerkSignInPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4">
-      <div className="max-w-xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400/90">FutureSight</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-100">
+    <div className="relative flex min-h-screen flex-col items-center justify-center gap-6 px-4">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-sky-100 via-white to-violet-100 dark:from-zinc-950 dark:via-black dark:to-emerald-950/50" />
+        <div className="absolute left-1/4 top-20 h-72 w-72 rounded-full bg-emerald-300/30 blur-3xl dark:bg-emerald-600/20" />
+        <div className="absolute right-1/4 bottom-20 h-72 w-72 rounded-full bg-sky-300/30 blur-3xl dark:bg-sky-600/20" />
+      </div>
+      <div className="glass max-w-xl rounded-2xl p-6 text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400/90">FinSight</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
           Build your future with us
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          Start investing early and secure your future with FutureSight.
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Start investing early and secure your future with FinSight.
         </p>
       </div>
       <SignIn
         routing="path"
         path="/sign-in"
         signUpUrl="/sign-up"
-        fallbackRedirectUrl="/pulse"
-        forceRedirectUrl="/pulse"
+        fallbackRedirectUrl="/invest/pulse"
+        forceRedirectUrl="/invest/pulse"
       />
     </div>
   );
@@ -108,14 +113,19 @@ export function ClerkSignInPage() {
 
 export function ClerkSignUpPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-zinc-950 px-4">
-      <div className="max-w-xl text-center">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-400/90">FutureSight</p>
-        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-100">
+    <div className="relative flex min-h-screen flex-col items-center justify-center gap-6 px-4">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-sky-100 via-white to-violet-100 dark:from-zinc-950 dark:via-black dark:to-emerald-950/50" />
+        <div className="absolute left-1/4 top-20 h-72 w-72 rounded-full bg-emerald-300/30 blur-3xl dark:bg-emerald-600/20" />
+        <div className="absolute right-1/4 bottom-20 h-72 w-72 rounded-full bg-sky-300/30 blur-3xl dark:bg-sky-600/20" />
+      </div>
+      <div className="glass max-w-xl rounded-2xl p-6 text-center">
+        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-emerald-600 dark:text-emerald-400/90">FinSight</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-100">
           Build your future with us
         </h1>
-        <p className="mt-2 text-sm text-zinc-400">
-          Start investing early and secure your future with FutureSight.
+        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Start investing early and secure your future with FinSight.
         </p>
       </div>
       <SignUp

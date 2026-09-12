@@ -1,7 +1,7 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-const API = process.env.VITE_PROXY_API ?? "http://127.0.0.1:8000";
+const API = process.env.VITE_PROXY_API ?? "http://127.0.0.1:8001";
 
 export default defineConfig({
   plugins: [react()],
@@ -9,7 +9,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/proxy": {
-        target: "http://127.0.0.1:8000",
+        target: "http://127.0.0.1:8001",
         changeOrigin: true,
         rewrite: (p) => p.replace(/^\/proxy/, ""),
       },
@@ -23,6 +23,7 @@ export default defineConfig({
       "/alerts": { target: API, changeOrigin: true },
       "/voice": { target: API, changeOrigin: true },
       "/trade": { target: API, changeOrigin: true },
+      "/trading": { target: API, changeOrigin: true },
       "/learn": { target: API, changeOrigin: true },
       "/health": { target: API, changeOrigin: true },
     },

@@ -155,7 +155,7 @@ export function MorningBriefing({ variant = "card" }: MorningBriefingProps) {
             </h2>
           </div>
           <Link
-            to="/portfolio"
+            to="/invest/portfolio"
             className="text-xs font-semibold text-amber-500/90 underline-offset-2 hover:underline"
           >
             Edit holdings
@@ -179,8 +179,8 @@ export function MorningBriefing({ variant = "card" }: MorningBriefingProps) {
           </p>
         </div>
         <Link
-          to="/portfolio"
-          className="text-xs font-medium text-emerald-400/90 underline-offset-2 hover:underline"
+          to="/invest/portfolio"
+          className="text-xs font-medium text-emerald-600 underline-offset-2 hover:underline dark:text-emerald-400/90"
         >
           Edit holdings →
         </Link>
@@ -218,7 +218,7 @@ export function MorningBriefing({ variant = "card" }: MorningBriefingProps) {
                 return (
                   <li
                     key={sym}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-zinc-800/80 bg-zinc-950/50 px-3 py-2"
+                    className="flex items-center justify-between gap-2 rounded-xl glass-inset px-3 py-2"
                   >
                     <div className="min-w-0">
                       <span className="font-semibold text-zinc-100">{sym}</span>

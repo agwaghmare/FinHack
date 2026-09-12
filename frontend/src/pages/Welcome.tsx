@@ -47,11 +47,17 @@ export function Welcome() {
   const [openTier, setOpenTier] = useState<string | null>("plus");
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-zinc-900 to-black text-zinc-100">
-      <header className="border-b border-white/5 px-6 py-4">
+    <div className="dark relative min-h-screen overflow-hidden text-zinc-100">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950 via-slate-900 to-black" />
+        <div className="absolute -left-20 top-10 h-80 w-80 rounded-full bg-emerald-500/25 blur-3xl" />
+        <div className="absolute right-0 top-1/3 h-96 w-96 rounded-full bg-cyan-500/20 blur-3xl" />
+        <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-violet-500/15 blur-3xl" />
+      </div>
+      <header className="glass border-b border-white/10 px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400/20 to-cyan-500/20 ring-1 ring-white/10">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400/30 to-cyan-500/30 ring-1 ring-white/20 backdrop-blur-md">
               <LineChart className="h-4 w-4 text-emerald-300" />
             </div>
             <span className="text-sm font-semibold tracking-tight">FinSight</span>
@@ -59,13 +65,13 @@ export function Welcome() {
           <div className="flex items-center gap-2">
             <Link
               to="/sign-in"
-              className="rounded-full px-4 py-2 text-xs font-semibold text-zinc-300 transition hover:bg-white/5 hover:text-white"
+              className="rounded-full px-4 py-2 text-xs font-semibold text-zinc-300 transition hover:bg-white/10 hover:text-white"
             >
               Log in
             </Link>
             <Link
               to="/sign-up"
-              className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-zinc-900 shadow-lg transition hover:bg-zinc-100"
+              className="rounded-full bg-white/90 px-4 py-2 text-xs font-semibold text-zinc-900 shadow-lg backdrop-blur-sm transition hover:bg-white"
             >
               Sign up
             </Link>
@@ -97,7 +103,7 @@ export function Welcome() {
             </Link>
             <Link
               to="/sign-in"
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-6 py-3 text-sm font-semibold text-white transition hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-md transition hover:bg-white/15"
             >
               I already have an account
             </Link>
@@ -109,7 +115,7 @@ export function Welcome() {
         </div>
 
         <section className="mt-16 grid gap-4 md:grid-cols-2">
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/15 p-6 text-left">
+          <div className="glass rounded-2xl border-emerald-500/25 p-6 text-left">
             <p className="text-xs font-semibold uppercase tracking-wide text-emerald-300/90">
               Financial education &amp; inclusion
             </p>
@@ -118,7 +124,7 @@ export function Welcome() {
               jargon barrier for new investors.
             </p>
           </div>
-          <div className="rounded-2xl border border-cyan-500/20 bg-cyan-950/10 p-6 text-left">
+          <div className="glass rounded-2xl border-cyan-500/25 p-6 text-left">
             <p className="text-xs font-semibold uppercase tracking-wide text-cyan-300/90">
               Investment research &amp; portfolio support
             </p>
@@ -146,10 +152,10 @@ export function Welcome() {
                   type="button"
                   onClick={() => setOpenTier(open ? null : t.id)}
                   className={clsx(
-                    "rounded-2xl border p-5 text-left transition",
+                    "glass rounded-2xl p-5 text-left transition",
                     t.featured
-                      ? "border-emerald-500/40 bg-emerald-950/20 shadow-[0_0_32px_rgba(16,185,129,0.08)]"
-                      : "border-white/10 bg-zinc-900/40 hover:border-white/20",
+                      ? "border-emerald-500/40 bg-emerald-500/10 shadow-[0_0_32px_rgba(16,185,129,0.12)]"
+                      : "hover:bg-white/10",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">

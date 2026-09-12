@@ -128,7 +128,7 @@ export function PodcastPlayer({ audioUrl, scriptText, title = "Market close" }: 
   const mode: "mp3" | "tts" | "none" = audioUrl ? "mp3" : scriptText ? "tts" : "none";
 
   return (
-    <div className="mt-4 space-y-3 rounded-xl border border-zinc-800 bg-zinc-950/60 p-4">
+    <div className="mt-4 space-y-3 rounded-xl glass-inset p-4">
       <div className="flex items-center justify-between gap-2">
         <p className="text-xs font-medium text-zinc-400">{title}</p>
         {mode === "mp3" && (

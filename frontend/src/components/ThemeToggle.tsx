@@ -7,7 +7,7 @@ export function ThemeToggle() {
     <button
       type="button"
       onClick={toggle}
-      className="inline-flex items-center gap-2 rounded-full border border-zinc-200/80 bg-white/70 px-4 py-2 text-sm font-medium text-zinc-700 shadow-soft transition hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/70 dark:text-zinc-200 dark:hover:border-zinc-600"
+      className="glass inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium text-zinc-700 transition hover:bg-white/80 dark:text-zinc-200 dark:hover:bg-white/10"
       aria-label="Toggle color mode"
     >
       {mode === "dark" ? (

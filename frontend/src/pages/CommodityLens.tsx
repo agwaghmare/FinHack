@@ -219,21 +219,21 @@ export function CommodityLens() {
                   </p>
                 )}
                 <div className="grid grid-cols-2 gap-2 text-[11px] sm:grid-cols-3">
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1.5">
+                  <div className="rounded-lg glass-inset px-2 py-1.5">
                     <span className="text-zinc-500">HMM</span>
                     <p className="font-medium text-zinc-200">
                       {regime.hmm_regime ?? "—"}
                       {typeof regime.hmm_confidence === "number" ? ` · ${regime.hmm_confidence}%` : ""}
                     </p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1.5">
+                  <div className="rounded-lg glass-inset px-2 py-1.5">
                     <span className="text-zinc-500">Rules</span>
                     <p className="font-medium text-zinc-200">
                       {regime.rules_regime ?? "—"}
                       {typeof regime.rules_confidence === "number" ? ` · ${regime.rules_confidence}%` : ""}
                     </p>
                   </div>
-                  <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 px-2 py-1.5">
+                  <div className="rounded-lg glass-inset px-2 py-1.5">
                     <span className="text-zinc-500">VIX (avg)</span>
                     <p className="font-medium tabular-nums text-zinc-200">
                       {regime.avg_vix != null ? regime.avg_vix.toFixed(1) : "—"}
@@ -261,7 +261,7 @@ export function CommodityLens() {
                 macroCalendar.map((ev) => (
                   <li
                     key={ev.id}
-                    className="flex flex-col gap-0.5 rounded-lg border border-zinc-800/80 bg-zinc-950/40 px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                    className="flex flex-col gap-0.5 rounded-lg glass-inset px-3 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-zinc-200">{ev.name}</p>

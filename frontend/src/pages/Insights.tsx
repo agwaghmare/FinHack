@@ -189,7 +189,7 @@ function PositionRiskRow({ pos }: { pos: PortfolioPosition }) {
   const sizeScore = Math.min(pos.weight * 6, 3).toFixed(1);
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-3 space-y-2">
+    <div className="glass-inset rounded-lg p-3 space-y-2">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold text-zinc-200">{pos.symbol}</span>
         <span className={`text-xs font-bold ${textColor}`}>{pos.risk_score}/10</span>
@@ -270,7 +270,7 @@ function FormattedInsight({ text, kind }: { text: string; kind?: string }) {
           const body = colonIdx > -1 ? rest.slice(colonIdx + 1).trim() : "";
 
           return (
-            <div key={i} className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-3 space-y-1">
+            <div key={i} className="glass-inset rounded-xl p-3 space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold text-blue-400 bg-blue-400/10 border border-blue-400/20 rounded-full w-5 h-5 flex items-center justify-center shrink-0">
                   {num}
@@ -397,7 +397,7 @@ function MacroStrategyContext({ strategy }: { strategy: StrategyData }) {
           </div>
 
           <div
-            className="rounded-2xl border border-zinc-200/90 bg-zinc-100/90 p-2 shadow-inner dark:border-zinc-700/90 dark:bg-zinc-950/80"
+            className="glass-inset rounded-2xl p-2"
             role="img"
             aria-label={`Regime mix over about ${totalDays} sessions: ${dayEntries.map(([l, d]) => `${l} ${d} days`).join(", ")}`}
           >
@@ -803,7 +803,7 @@ function InsightsContent({ userId }: { userId: string }) {
                         const href = externalArticleUrl(a.url);
                         const title = a.title ?? "Untitled";
                         return (
-                        <li key={`${a.url ?? i}-${i}`} className="flex flex-col gap-2 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                        <li key={`${a.url ?? i}-${i}`} className="flex flex-col gap-2 glass-inset rounded-xl p-3">
                           {href ? (
                             <a
                               href={href}
@@ -862,7 +862,7 @@ function InsightsContent({ userId }: { userId: string }) {
         )}
         <div className="mt-5 grid gap-4 lg:grid-cols-2">
           {(crossAsset?.chains ?? []).map((ch) => (
-            <div key={ch.id ?? ch.title} className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-zinc-800 dark:bg-zinc-950/50">
+            <div key={ch.id ?? ch.title} className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-4 dark:border-white/10">
               <p className="text-xs font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-500/90">{ch.title}</p>
               <p className="mt-2 text-[11px] text-zinc-500">{ch.when}</p>
               <ul className="mt-3 space-y-2 text-sm text-zinc-700 dark:text-zinc-300">

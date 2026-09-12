@@ -36,6 +36,20 @@ LEARN_MODULES: list[dict] = [
         "summary": "Using a sandbox to test ideas without capital risk.",
         "topics": ["Discipline", "Journaling", "Metrics"],
     },
+    {
+        "id": "trading-mechanics",
+        "title": "Trading Mechanics",
+        "duration_min": 13,
+        "summary": "Orders, spreads, slippage, and how execution differs from a chart click.",
+        "topics": ["Order types", "Bid-ask", "Slippage", "Sessions"],
+    },
+    {
+        "id": "strategy-design",
+        "title": "Strategy Design & Backtests",
+        "duration_min": 16,
+        "summary": "Rules, expectancy, overfitting traps, and reading VaR vs backtest metrics.",
+        "topics": ["Expectancy", "Drawdowns", "Overfitting", "VaR vs P&L"],
+    },
 ]
 
 QUIZZES: dict[str, list[dict]] = {
@@ -313,6 +327,118 @@ QUIZZES: dict[str, list[dict]] = {
                 "Skip brokers entirely",
             ],
             "correct": 0,
+        },
+    ],
+    "trading-mechanics": [
+        {
+            "q": "A limit buy order:",
+            "options": [
+                "Guarantees an immediate fill at any price",
+                "Sets the highest price you are willing to pay",
+                "Only works in after-hours",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "The bid-ask spread is wider when:",
+            "options": [
+                "Liquidity is thin or volatility spikes",
+                "The Fed prints money",
+                "You use a market order",
+            ],
+            "correct": 0,
+        },
+        {
+            "q": "Slippage means:",
+            "options": [
+                "Your broker stole shares",
+                "Fill price differs from the price you expected",
+                "Dividends were reinvested",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "A stop-loss market order primarily:",
+            "options": [
+                "Locks in a guaranteed exit price",
+                "Triggers a market sell once a trigger price trades",
+                "Removes all overnight risk",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "Paper fills often look better than live because they ignore:",
+            "options": [
+                "Charts",
+                "Spreads, partial fills, and emotional size creep",
+                "Company fundamentals",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "Regular U.S. equity session risk is concentrated around:",
+            "options": [
+                "Only weekends",
+                "Open, close, and news windows when spreads widen",
+                "Lunch only",
+            ],
+            "correct": 1,
+        },
+    ],
+    "strategy-design": [
+        {
+            "q": "Expectancy roughly means:",
+            "options": [
+                "Guaranteed next-trade profit",
+                "Average outcome per trade given win rate and payoff",
+                "How many indicators you use",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "Overfitting a backtest usually happens when you:",
+            "options": [
+                "Use out-of-sample tests",
+                "Tune many parameters until history looks perfect",
+                "Compare to buy-and-hold",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "Max drawdown tells you:",
+            "options": [
+                "Only the best winning streak",
+                "The worst peak-to-trough equity decline in the sample",
+                "Next week's return",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "Daily VaR answers:",
+            "options": [
+                "How much you will definitely lose tomorrow",
+                "A statistical loss threshold under a confidence level",
+                "Your broker's margin call time",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "A strategy should beat a simple baseline like:",
+            "options": [
+                "Random tweets",
+                "Buy-and-hold of the same instrument (fees aside)",
+                "Always being 100% cash",
+            ],
+            "correct": 1,
+        },
+        {
+            "q": "Before risking real capital, prioritize:",
+            "options": [
+                "Max leverage",
+                "Position sizing, journal, and paper/live rule parity",
+                "More indicators on one chart",
+            ],
+            "correct": 1,
         },
     ],
 }

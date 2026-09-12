@@ -8,6 +8,16 @@
   --ink: 17 24 39;
   --ink-muted: 107 114 128;
   --accent: 148 163 184;
+  --glass-bg: 255 255 255;
+  --glass-bg-alpha: 0.55;
+  --glass-border: 255 255 255;
+  --glass-border-alpha: 0.35;
+  --glass-inset-alpha: 0.35;
+  --glass-nav-alpha: 0.45;
+  --glass-modal-alpha: 0.72;
+  --atmosphere-a: 186 230 253;
+  --atmosphere-b: 221 214 254;
+  --atmosphere-c: 167 243 208;
 }
 
 .dark {
@@ -16,6 +26,16 @@
   --ink: 250 250 250;
   --ink-muted: 161 161 170;
   --accent: 212 212 216;
+  --glass-bg: 24 24 27;
+  --glass-bg-alpha: 0.45;
+  --glass-border: 255 255 255;
+  --glass-border-alpha: 0.12;
+  --glass-inset-alpha: 0.3;
+  --glass-nav-alpha: 0.55;
+  --glass-modal-alpha: 0.65;
+  --atmosphere-a: 30 58 138;
+  --atmosphere-b: 76 29 149;
+  --atmosphere-c: 6 78 59;
 }
 
 html,
@@ -26,11 +46,55 @@ body,
 
 body {
   font-family: "Inter", system-ui, sans-serif;
-  @apply bg-zinc-50 text-zinc-900 transition-colors duration-300 dark:bg-black dark:text-zinc-50;
+  @apply text-zinc-900 transition-colors duration-300 dark:text-zinc-50;
+  background-color: rgb(var(--surface));
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgb(var(--atmosphere-a) / 0.35), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 0%, rgb(var(--atmosphere-b) / 0.28), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 50% 100%, rgb(var(--atmosphere-c) / 0.22), transparent 55%);
+  background-attachment: fixed;
 }
 
-.glass {
-  @apply bg-white/70 dark:bg-zinc-900/60 backdrop-blur-xl border border-white/20 dark:border-white/10 shadow-glass;
+@layer components {
+  .glass {
+    background-color: rgb(var(--glass-bg) / var(--glass-bg-alpha));
+    border: 1px solid rgb(var(--glass-border) / var(--glass-border-alpha));
+    @apply shadow-glass backdrop-blur-xl backdrop-saturate-150;
+  }
+
+  .glass-nav {
+    background-color: rgb(var(--glass-bg) / var(--glass-nav-alpha));
+    border-color: rgb(var(--glass-border) / var(--glass-border-alpha));
+    @apply border-r shadow-glass backdrop-blur-2xl backdrop-saturate-150;
+  }
+
+  .glass-inset {
+    background-color: rgb(var(--glass-bg) / var(--glass-inset-alpha));
+    border: 1px solid rgb(var(--glass-border) / calc(var(--glass-border-alpha) * 0.85));
+    @apply backdrop-blur-md backdrop-saturate-150;
+  }
+
+  .glass-modal {
+    background-color: rgb(var(--glass-bg) / var(--glass-modal-alpha));
+    border: 1px solid rgb(var(--glass-border) / calc(var(--glass-border-alpha) + 0.08));
+    @apply shadow-2xl backdrop-blur-2xl backdrop-saturate-150;
+  }
+
+  .glass-overlay {
+    @apply bg-zinc-950/40 backdrop-blur-md dark:bg-black/50;
+  }
+
+  .glass-input {
+    background-color: rgb(var(--glass-bg) / 0.4);
+    border: 1px solid rgb(var(--glass-border) / var(--glass-border-alpha));
+    @apply backdrop-blur-sm focus:outline-none focus:ring-1 focus:ring-white/30;
+  }
+
+  .glass-chip {
+    background-color: rgb(var(--glass-bg) / 0.35);
+    border: 1px solid rgb(var(--glass-border) / var(--glass-border-alpha));
+    @apply backdrop-blur-sm;
+  }
 }
 
 /* Market Pulse login streak banner */

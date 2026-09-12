@@ -25,7 +25,7 @@ export function Onboarding() {
 
   if (!isLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-zinc-100 via-white to-zinc-100 dark:from-black dark:via-zinc-950 dark:to-black">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-zinc-500" />
       </div>
     );
@@ -37,7 +37,7 @@ export function Onboarding() {
 
   const existing = parseInvestmentPrefs(user.unsafeMetadata?.[FINHACK_INVESTMENT_PREFS_KEY]);
   if (existing.onboardingComplete) {
-    return <Navigate to="/pulse" replace />;
+    return <Navigate to="/invest/pulse" replace />;
   }
 
   const working = prefs ?? existing;
@@ -67,7 +67,7 @@ export function Onboarding() {
           [FINHACK_INVESTMENT_PREFS_KEY]: next,
         },
       });
-      navigate("/pulse", { replace: true });
+      navigate("/invest/pulse", { replace: true });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not save preferences");
     } finally {
@@ -103,7 +103,12 @@ export function Onboarding() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-zinc-100 via-white to-zinc-100 dark:from-black dark:via-zinc-950 dark:to-black">
+    <div className="relative min-h-screen">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute inset-0 bg-gradient-to-br from-sky-100/80 via-white to-violet-100/70 dark:from-zinc-950 dark:via-black dark:to-emerald-950/40" />
+        <div className="absolute -left-24 top-10 h-72 w-72 rounded-full bg-sky-300/40 blur-3xl dark:bg-sky-600/20" />
+        <div className="absolute right-0 top-1/4 h-96 w-96 rounded-full bg-violet-300/35 blur-3xl dark:bg-violet-700/15" />
+      </div>
       <div className="mx-auto flex min-h-screen max-w-2xl flex-col justify-center px-6 py-16">
         <header className="mb-8 text-center">
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500">Welcome</p>

@@ -38,7 +38,7 @@ export function InsightPanel({ title, lines }: { title: string; lines: string[] 
       </div>
       <ul className="mt-4 space-y-2 text-sm leading-relaxed text-zinc-300">
         {lines.map((line) => (
-          <li key={line} className="rounded-lg border border-zinc-800/80 bg-zinc-950/40 px-3 py-2">
+          <li key={line} className="rounded-lg glass-inset px-3 py-2">
             {line}
           </li>
         ))}

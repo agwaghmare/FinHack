@@ -105,12 +105,12 @@ export function TrackMortgage() {
       <section className="glass rounded-2xl p-6">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-zinc-500">Lifetime interest & payoff</h2>
         <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+          <div className="glass-inset rounded-xl p-4">
             <p className="text-xs text-zinc-500">Baseline interest</p>
             <p className="mt-1 text-lg font-semibold tabular-nums text-zinc-200">{fmtMoney(baseline.totalInterest, 0)}</p>
             <p className="text-xs text-zinc-500">{baseline.months} payments</p>
           </div>
-          <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 p-4">
+          <div className="glass-inset rounded-xl p-4">
             <p className="text-xs text-zinc-500">With extra payment</p>
             <p className="mt-1 text-lg font-semibold tabular-nums text-emerald-400">{fmtMoney(withExtra.totalInterest, 0)}</p>
             <p className="text-xs text-zinc-500">{withExtra.months} payments</p>
